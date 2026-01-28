@@ -378,7 +378,7 @@ async def update_interview_completion(request: UpdateInterviewCompletionRequest)
         raise HTTPException(status_code=500, detail=f"Error updating interview completion: {str(e)}")
 
 
-@app.post("/api/interviews/check-status")
+@app.get("/api/interviews/check-status")
 async def check_interview_status_by_email(email: str):
     """Check interview status for a candidate by email.
     
@@ -387,7 +387,12 @@ async def check_interview_status_by_email(email: str):
     2. Gets their interview_id (if stored)
     3. Fetches latest status from HackerRank
     4. Updates MongoDB with latest status and result
+    
+    Usage: GET /api/interviews/check-status?email=candidate@example.com
     """
+    if not email:
+        raise HTTPException(status_code=400, detail="Email parameter is required")
+    
     try:
         # Get expert from MongoDB
         expert = get_expert_by_email(email)
@@ -451,11 +456,82 @@ async def check_interview_status_by_email(email: str):
         }
     except HTTPException:
         raise
-    except req.exceptions.RequestException as e:
-        detail = getattr(e, "response", None) and getattr(e.response, "text", str(e)) or str(e)
-        raise HTTPException(status_code=getattr(e, "response", None) and e.response.status_code or 502, detail=detail)
     except Exception as e:
+        import requests as req
+        if isinstance(e, req.exceptions.RequestException):
+            detail = getattr(e, "response", None) and getattr(e.response, "text", str(e)) or str(e)
+            raise HTTPException(status_code=getattr(e, "response", None) and e.response.status_code or 502, detail=detail)
         raise HTTPException(status_code=500, detail=f"Error checking interview status: {str(e)}")
+
+
+class HackerRankWebhookPayload(BaseModel):
+    """Webhook payload from HackerRank when interview status changes"""
+    interview_id: str
+    status: str
+    candidate_email: Optional[str] = None
+    thumbs_up: Optional[bool] = None
+    ended_at: Optional[str] = None
+
+
+@app.post("/api/interviews/webhook")
+async def hackerrank_webhook(payload: HackerRankWebhookPayload):
+    """Webhook endpoint for HackerRank to notify when interview status changes.
+    
+    This endpoint can be configured in HackerRank settings to receive notifications
+    when interviews are completed or status changes.
+    
+    If candidate_email is not provided, we'll try to find the candidate by interview_id.
+    """
+    try:
+        interview_id = payload.interview_id
+        interview_status = payload.status
+        candidate_email = payload.candidate_email
+        
+        # If email not provided, try to find candidate by interview_id
+        if not candidate_email:
+            collection = get_mongodb_collection()
+            if collection:
+                expert = collection.find_one({'interview_id': interview_id})
+                if expert:
+                    candidate_email = expert.get('email')
+        
+        if not candidate_email:
+            return {
+                "success": False,
+                "message": f"Could not find candidate for interview {interview_id}"
+            }
+        
+        # Determine result from thumbs_up if status is completed
+        interview_result = None
+        if interview_status == 'completed':
+            if payload.thumbs_up is True:
+                interview_result = 'pass'
+            elif payload.thumbs_up is False:
+                interview_result = 'fail'
+        
+        # Update MongoDB
+        update_result = update_expert_interview_completion(
+            email=candidate_email,
+            interview_status=interview_status,
+            interview_result=interview_result,
+            interview_id=interview_id
+        )
+        
+        if update_result:
+            return {
+                "success": True,
+                "message": f"Interview status updated for {candidate_email}",
+                "status": interview_status,
+                "result": interview_result
+            }
+        else:
+            return {
+                "success": False,
+                "message": f"Failed to update interview status for {candidate_email}"
+            }
+    except Exception as e:
+        print(f"❌ Error processing HackerRank webhook: {e}")
+        raise HTTPException(status_code=500, detail=f"Error processing webhook: {str(e)}")
 
 
 @app.post("/api/interviews/check-all-pending")

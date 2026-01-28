@@ -49,6 +49,7 @@ import { AddExpertsModal } from './modals/AddExpertsModal';
 import { SendEmailModal } from './modals/SendEmailModal';
 import { SendTestModal } from './modals/SendTestModal';
 import { ScheduleInterviewModal } from './modals/ScheduleInterviewModal';
+import { InterviewResultModal } from './modals/InterviewResultModal';
 import { SendContractModal } from './modals/SendContractModal';
 import { ProvisionToolsModal } from './modals/ProvisionToolsModal';
 import { ProcessingNotification } from './modals/ProcessingNotification';
@@ -109,6 +110,7 @@ export function ExpertsTable() {
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [testModalOpen, setTestModalOpen] = useState(false);
   const [interviewModalOpen, setInterviewModalOpen] = useState(false);
+  const [interviewResultModalOpen, setInterviewResultModalOpen] = useState(false);
   const [contractModalOpen, setContractModalOpen] = useState(false);
   const [provisionModalOpen, setProvisionModalOpen] = useState(false);
   const [selectedExpert, setSelectedExpert] = useState<Expert | null>(null);
@@ -267,6 +269,11 @@ export function ExpertsTable() {
   const handleScheduleInterview = (expert: Expert) => {
     setSelectedExpert(expert);
     setInterviewModalOpen(true);
+  };
+
+  const handleSetInterviewResult = (expert: Expert) => {
+    setSelectedExpert(expert);
+    setInterviewResultModalOpen(true);
   };
 
   const handleSendContract = (expert: Expert) => {
@@ -729,8 +736,20 @@ export function ExpertsTable() {
                             }}
                           >
                             <Video className="w-4 h-4" />
-                            <span>Interview</span>
+                            <span>Schedule Interview</span>
                           </DropdownMenuItem>
+                          {(expert.workflow.interview === 'scheduled' || expert.workflow.interview === 'completed') && (
+                            <DropdownMenuItem 
+                              className="gap-2 cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSetInterviewResult(expert);
+                              }}
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                              <span>Set Interview Result</span>
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem 
                             className="gap-2 cursor-pointer"
                             onClick={(e) => {
@@ -921,6 +940,18 @@ export function ExpertsTable() {
         onOpenChange={setInterviewModalOpen}
         candidateName={selectedExpert?.name}
         candidateEmail={selectedExpert?.email}
+      />
+      <InterviewResultModal
+        open={interviewResultModalOpen}
+        onOpenChange={setInterviewResultModalOpen}
+        candidateEmail={selectedExpert?.email || ''}
+        candidateName={selectedExpert?.name}
+        currentStatus={selectedExpert?.workflow?.interview}
+        currentResult={selectedExpert?.workflow?.interviewResult}
+        onUpdate={() => {
+          // Refresh experts list
+          window.location.reload();
+        }}
       />
       <SendContractModal 
         open={contractModalOpen} 

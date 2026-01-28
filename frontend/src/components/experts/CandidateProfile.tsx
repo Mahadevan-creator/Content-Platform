@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
-import { ArrowLeft, Github, Award, Linkedin, Twitter, Globe, GitMerge, Clock, Activity, GitPullRequest, Layers, Brain, Sparkles, TrendingUp, FileText, ClipboardCheck, ExternalLink, User, ChevronDown, ChevronRight, Mail, MapPin, MessageSquare, Code, CheckCircle } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { ArrowLeft, Github, Award, Linkedin, Twitter, Globe, GitMerge, Clock, Activity, GitPullRequest, Layers, Brain, Sparkles, TrendingUp, FileText, ClipboardCheck, ExternalLink, User, ChevronDown, ChevronRight, Mail, MapPin, MessageSquare, Code, CheckCircle, RefreshCw } from 'lucide-react';
+import { checkInterviewStatus } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
 import {
   Radar,
   RadarChart,
@@ -52,6 +54,8 @@ interface CandidateProfileProps {
     } | null;
     hrwTestReportUrl?: string;
     interviewReportUrl?: string;
+    interview_report_url?: string;
+    interview_url?: string;
   };
   onBack: () => void;
 }
@@ -189,11 +193,17 @@ export function CandidateProfile({ expert, onBack }: CandidateProfileProps) {
     github: expert.github_profile_url || `https://github.com/${expert.github_username || ''}`,
   };
   
-  // Mock report links
+  // Report links - HRW Report always shown (static placeholder for now), Interview Report when we have a real URL
+  const interviewReportUrl = expert.interview_report_url || expert.interviewReportUrl;
   const reportLinks = {
     hrwTestReport: expert.hrwTestReportUrl || 'https://example.com/hrw-test-report',
-    interviewReport: expert.interviewReportUrl || 'https://example.com/interview-report',
+    interviewReport: interviewReportUrl,
   };
+  
+  // Interview Report link only when we have a real URL from MongoDB
+  const hasRealInterviewReport = interviewReportUrl &&
+    !interviewReportUrl.includes('example.com') &&
+    interviewReportUrl.startsWith('http');
   
   const username = expert.github_username || expert.email.split('@')[0];
   
@@ -227,6 +237,91 @@ export function CandidateProfile({ expert, onBack }: CandidateProfileProps) {
   const displayedSkills = showAllSkills ? skills : skills.slice(0, 5);
   const hasMoreSkills = skills.length > 5;
   
+  // Interview status checking
+  const [checkingInterviewStatus, setCheckingInterviewStatus] = useState(false);
+  const [lastStatusCheck, setLastStatusCheck] = useState<Date | null>(null);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const { toast } = useToast();
+  
+  // Check if candidate has an interview scheduled/completed
+  const hasInterview = expert.interview_report_url || expert.interview_url || (expert as any).interview_id;
+  const interviewStatus = (expert as any).workflow?.interview || 'pending';
+  const interviewResult = (expert as any).workflow?.interviewResult || 'pending';
+  
+  // Memoize the check function to avoid recreating it on every render
+  const checkInterviewStatusOnce = useCallback(async () => {
+    if (!expert.email || checkingInterviewStatus) {
+      return;
+    }
+    
+    try {
+      setCheckingInterviewStatus(true);
+      const result = await checkInterviewStatus(expert.email);
+      
+      if (result.success) {
+        setLastStatusCheck(new Date());
+        
+        // Show toast if status changed to completed
+        if (result.updated && result.interview_status === 'completed') {
+          if (result.interview_result) {
+            toast({
+              title: 'Interview completed',
+              description: `Result: ${result.interview_result === 'pass' ? 'Passed' : result.interview_result === 'strong_pass' ? 'Strong Pass' : 'Failed'}`,
+            });
+          } else {
+            toast({
+              title: 'Interview completed',
+              description: 'Waiting for result...',
+            });
+          }
+        }
+        
+        // Always refresh the page data when status is checked
+        // The parent component should refetch experts
+        window.dispatchEvent(new CustomEvent('refresh-experts'));
+      }
+    } catch (error) {
+      // Silently fail - don't show error toast for background checks
+      // Only show error for manual refreshes
+      console.error('Failed to check interview status:', error);
+    } finally {
+      setCheckingInterviewStatus(false);
+    }
+  }, [expert.email, checkingInterviewStatus, toast]);
+  
+  // Auto-check interview status on mount and periodically if interview is scheduled
+  useEffect(() => {
+    // Only check if candidate has an interview
+    if (!hasInterview || !expert.email) {
+      return;
+    }
+    
+    // Check immediately on mount
+    checkInterviewStatusOnce();
+    
+    // If interview is scheduled (not completed), poll every 1 hour
+    if (interviewStatus === 'scheduled') {
+      pollingIntervalRef.current = setInterval(() => {
+        checkInterviewStatusOnce();
+      }, 60 * 60 * 1000); // 1 hour
+    }
+    
+    // Cleanup on unmount
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, [expert.email, hasInterview, interviewStatus, checkInterviewStatusOnce]);
+  
+  const handleManualRefresh = async () => {
+    await checkInterviewStatusOnce();
+    toast({
+      title: 'Status refreshed',
+      description: lastStatusCheck ? `Last checked: ${lastStatusCheck.toLocaleTimeString()}` : 'Checking interview status...',
+    });
+  };
+  
   // Categorize metrics for AI summary
   const { strengths, weaknesses } = categorizeMetrics(metrics, summaries);
   
@@ -254,8 +349,19 @@ export function CandidateProfile({ expert, onBack }: CandidateProfileProps) {
           )}
         </div>
         
-        {/* Social Links */}
+        {/* Social Links & Interview Status Check */}
         <div className="flex items-center gap-2">
+          {/* Interview Status Check Button */}
+          {hasInterview && (
+            <button
+              onClick={handleManualRefresh}
+              disabled={checkingInterviewStatus}
+              className="p-2 rounded-lg hover:bg-surface-2 transition-colors group disabled:opacity-50"
+              title={checkingInterviewStatus ? 'Checking status...' : 'Refresh interview status'}
+            >
+              <RefreshCw className={`w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors ${checkingInterviewStatus ? 'animate-spin' : ''}`} />
+            </button>
+          )}
           <a
             href={socialLinks.github}
             target="_blank"
@@ -325,7 +431,7 @@ export function CandidateProfile({ expert, onBack }: CandidateProfileProps) {
             <span className="text-4xl font-bold text-terminal-amber">{hrwScore}</span>
             <span className="text-muted-foreground">/ 100</span>
           </div>
-          {/* Report Links inside HRW Score tile */}
+          {/* Report Links inside HRW Score tile - HRW Report always shown (static for now), Interview Report when scheduled */}
           <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-border">
             <a
               href={reportLinks.hrwTestReport}
@@ -337,16 +443,18 @@ export function CandidateProfile({ expert, onBack }: CandidateProfileProps) {
               <span className="text-xs font-medium text-terminal-amber">HRW Report</span>
               <ExternalLink className="w-3 h-3 text-terminal-amber/60 group-hover:text-terminal-amber transition-colors" />
             </a>
-            <a
-              href={reportLinks.interviewReport}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-terminal-cyan/10 rounded border border-terminal-cyan/20 hover:bg-terminal-cyan/20 transition-colors group"
-            >
-              <ClipboardCheck className="w-3.5 h-3.5 text-terminal-cyan" />
-              <span className="text-xs font-medium text-terminal-cyan">Interview Report</span>
-              <ExternalLink className="w-3 h-3 text-terminal-cyan/60 group-hover:text-terminal-cyan transition-colors" />
-            </a>
+            {hasRealInterviewReport && (
+              <a
+                href={reportLinks.interviewReport!}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-terminal-cyan/10 rounded border border-terminal-cyan/20 hover:bg-terminal-cyan/20 transition-colors group"
+              >
+                <ClipboardCheck className="w-3.5 h-3.5 text-terminal-cyan" />
+                <span className="text-xs font-medium text-terminal-cyan">Interview Report</span>
+                <ExternalLink className="w-3 h-3 text-terminal-cyan/60 group-hover:text-terminal-cyan transition-colors" />
+              </a>
+            )}
           </div>
         </div>
 

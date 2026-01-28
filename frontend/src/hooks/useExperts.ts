@@ -35,6 +35,11 @@ export interface MongoDBExpert {
   linkedin_url?: string | null;
   location?: string | null;
   
+  // Interview information
+  interview_report_url?: string | null;
+  interview_url?: string | null;
+  interview_id?: string | null;
+  
   // Contribution heatmap (organized by year, keys are strings in MongoDB)
   contribution_heatmap?: {
     [year: string]: Array<{
@@ -73,63 +78,79 @@ export function useExperts() {
   const [experts, setExperts] = useState<ExpertWithDisplay[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const fetchExperts = async () => {
+    try {
+      setLoading(true);
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
+      const response = await fetch(`${API_BASE_URL}/api/experts`);
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch experts: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const expertsData: MongoDBExpert[] = data.experts || [];
+
+      // Transform MongoDB data to match UI format
+      const transformedExperts: ExpertWithDisplay[] = expertsData.map((expert) => ({
+        ...expert,
+        id: expert._id || expert.github_username, // Ensure id field exists
+        name: (expert as any).display_name || expert.github_username,
+        email: expert.email || '',
+        role: 'Developer',  // Can be updated later if needed
+        status: ((expert as any).status || 'available') as 'available' | 'interviewing' | 'onboarded' | 'contracted',
+        skills: expert.tech_stack || [],
+        rating: expert.git_score || 0,
+        gitScore: expert.git_score || 0,
+        workflow: (expert as any).workflow || {
+          emailSent: 'pending' as const,
+          testSent: 'pending' as const,
+          interview: 'pending' as const,
+          interviewResult: 'pending' as const,
+        },
+      }));
+
+      // Sort by created_at descending (most recent first)
+      transformedExperts.sort((a, b) => {
+        const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return dateB - dateA;
+      });
+
+      setExperts(transformedExperts);
+      setError(null);
+    } catch (err) {
+      setError(err as Error);
+      console.error('Error fetching experts:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    async function fetchExperts() {
-      try {
-        setLoading(true);
-        const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
-        const response = await fetch(`${API_BASE_URL}/api/experts`);
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch experts: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        const expertsData: MongoDBExpert[] = data.experts || [];
-
-        // Transform MongoDB data to match UI format
-        const transformedExperts: ExpertWithDisplay[] = expertsData.map((expert) => ({
-          ...expert,
-          id: expert._id || expert.github_username, // Ensure id field exists
-          name: (expert as any).display_name || expert.github_username,
-          email: expert.email || '',
-          role: 'Developer',  // Can be updated later if needed
-          status: ((expert as any).status || 'available') as 'available' | 'interviewing' | 'onboarded' | 'contracted',
-          skills: expert.tech_stack || [],
-          rating: expert.git_score || 0,
-          gitScore: expert.git_score || 0,
-          workflow: (expert as any).workflow || {
-            emailSent: 'pending' as const,
-            testSent: 'pending' as const,
-            interview: 'pending' as const,
-            interviewResult: 'pending' as const,
-          },
-        }));
-
-        // Sort by created_at descending (most recent first)
-        transformedExperts.sort((a, b) => {
-          const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
-          const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
-          return dateB - dateA;
-        });
-
-        setExperts(transformedExperts);
-        setError(null);
-      } catch (err) {
-        setError(err as Error);
-        console.error('Error fetching experts:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
     fetchExperts();
+  }, [refreshTrigger]);
+
+  // Listen for refresh events from other components
+  useEffect(() => {
+    const handleRefresh = () => {
+      fetchExperts();
+    };
+    
+    window.addEventListener('refresh-experts', handleRefresh);
+    return () => {
+      window.removeEventListener('refresh-experts', handleRefresh);
+    };
   }, []);
 
-  return { experts, loading, error, refetch: () => {
-    // Trigger refetch by updating a dependency
-    setExperts([]);
-    setLoading(true);
-  } };
+  return { 
+    experts, 
+    loading, 
+    error, 
+    refetch: () => {
+      setRefreshTrigger(prev => prev + 1);
+    }
+  };
 }

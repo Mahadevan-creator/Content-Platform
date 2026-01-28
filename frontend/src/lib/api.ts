@@ -115,3 +115,56 @@ export async function uploadCsvCandidates(file: File): Promise<JobStatus> {
 
   return response.json();
 }
+
+// HackerRank Interview API (proxied via backend)
+export interface InterviewerItem {
+  email: string;
+  name: string;
+}
+
+export interface CandidateInfo {
+  name?: string;
+  email: string;
+}
+
+export interface CreateInterviewPayload {
+  from?: string; // ISO datetime
+  to?: string;
+  title: string;
+  notes?: string;
+  resume_url?: string;
+  interviewers?: InterviewerItem[];
+  result_url?: string;
+  candidate: CandidateInfo;
+  send_email?: boolean;
+  metadata?: Record<string, unknown>;
+  interview_template_id?: number;
+}
+
+export interface CreateInterviewResponse {
+  id: string;
+  from?: string;
+  to?: string;
+  status: string;
+  url: string;
+  title: string;
+  candidate?: { name?: string; email: string };
+  report_url?: string;
+  ended_at?: string;
+  [key: string]: unknown;
+}
+
+export async function createInterview(payload: CreateInterviewPayload): Promise<CreateInterviewResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/interviews/create`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(typeof err.detail === 'string' ? err.detail : 'Failed to create interview');
+  }
+
+  return response.json();
+}

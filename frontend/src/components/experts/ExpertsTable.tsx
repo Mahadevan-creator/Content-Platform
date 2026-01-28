@@ -291,7 +291,10 @@ export function ExpertsTable() {
   };
 
   const handleBulkInterview = () => {
-    setSelectedExpert(null);
+    // Use first selected expert so modal has candidate name/email
+    const firstId = Array.from(selectedExperts)[0];
+    const firstExpert = firstId ? filteredExperts.find((e) => ((e as any).id || (e as any)._id || e.github_username) === firstId) : null;
+    setSelectedExpert(firstExpert || null);
     setInterviewModalOpen(true);
   };
 
@@ -917,6 +920,7 @@ export function ExpertsTable() {
         open={interviewModalOpen} 
         onOpenChange={setInterviewModalOpen}
         candidateName={selectedExpert?.name}
+        candidateEmail={selectedExpert?.email}
       />
       <SendContractModal 
         open={contractModalOpen} 

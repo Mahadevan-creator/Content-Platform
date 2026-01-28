@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional, Dict
 import asyncio
 from datetime import datetime
@@ -13,8 +13,12 @@ import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
+# Load environment variables: backend .env first, then frontend .env as fallback
 load_dotenv()
+_backend_dir = Path(__file__).resolve().parent
+_frontend_env = _backend_dir.parent / "frontend" / ".env"
+if _frontend_env.exists():
+    load_dotenv(_frontend_env)
 
 from services.github_service import analyze_repository_contributors, get_github_token
 from services.mongodb_service import get_expert, get_mongodb_collection
@@ -74,6 +78,32 @@ class ContributorAnalysis(BaseModel):
 class AnalyzeRepoResponse(BaseModel):
     analyses: List[ContributorAnalysis]
     repo_url: str
+
+
+# HackerRank Interview API (proxy)
+class InterviewerItem(BaseModel):
+    email: str
+    name: str
+
+class CandidateInfo(BaseModel):
+    name: Optional[str] = None
+    email: str
+
+class CreateInterviewRequest(BaseModel):
+    from_: Optional[str] = Field(None, alias="from")  # ISO datetime
+    to: Optional[str] = None
+    title: str
+    notes: Optional[str] = None
+    resume_url: Optional[str] = None
+    interviewers: Optional[List[InterviewerItem]] = None
+    result_url: Optional[str] = None
+    candidate: CandidateInfo
+    send_email: Optional[bool] = True
+    metadata: Optional[Dict] = None
+    interview_template_id: Optional[int] = None
+
+    class Config:
+        populate_by_name = True
 
 @app.get("/")
 async def root():
@@ -190,6 +220,33 @@ async def get_job_status(job_id: str):
         result=status.get("result"),
         error=status.get("error")
     )
+
+@app.post("/api/interviews/create")
+@app.post("/api/interviews/create/")  # support with trailing slash
+async def create_interview(request: CreateInterviewRequest):
+    """Proxy to HackerRank POST /x/api/v3/interviews. Requires HACKERRANK_API_KEY in env."""
+    import requests as req
+    api_key = os.getenv("HACKERRANK_API_KEY")
+    base_url = (os.getenv("HACKERRANK_API_BASE") or "https://www.hackerrank.com").rstrip("/")
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="HackerRank API key not configured. Set HACKERRANK_API_KEY in environment."
+        )
+    payload = request.model_dump(by_alias=True, exclude_none=True)
+    url = f"{base_url}/x/api/v3/interviews"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    try:
+        r = req.post(url, json=payload, headers=headers, timeout=30)
+        r.raise_for_status()
+        return r.json()
+    except req.exceptions.RequestException as e:
+        detail = getattr(e, "response", None) and getattr(e.response, "text", str(e)) or str(e)
+        raise HTTPException(status_code=getattr(e, "response", None) and e.response.status_code or 502, detail=detail)
+
 
 @app.post("/api/candidates/upload-csv", response_model=JobStatusResponse)
 async def upload_csv_candidates(

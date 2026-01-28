@@ -1,0 +1,242 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 4%;
+    --foreground: 0 0% 95%;
+
+    --card: 0 0% 7%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 0 0% 7%;
+    --popover-foreground: 0 0% 95%;
+
+    --primary: 160 84% 39%;
+    --primary-foreground: 0 0% 2%;
+
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 95%;
+
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 55%;
+
+    --accent: 160 84% 39%;
+    --accent-foreground: 0 0% 2%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
+    --ring: 160 84% 39%;
+
+    --radius: 0.5rem;
+
+    /* Custom design tokens */
+    --terminal-green: 160 84% 39%;
+    --terminal-amber: 38 92% 50%;
+    --terminal-cyan: 186 100% 50%;
+    --terminal-red: 0 72% 51%;
+    
+    --surface-0: 0 0% 4%;
+    --surface-1: 0 0% 7%;
+    --surface-2: 0 0% 10%;
+    --surface-3: 0 0% 14%;
+    
+    --glow-green: 160 84% 39%;
+    --glow-intensity: 0.15;
+    
+    --sidebar-background: 0 0% 5%;
+    --sidebar-foreground: 0 0% 85%;
+    --sidebar-primary: 160 84% 39%;
+    --sidebar-primary-foreground: 0 0% 2%;
+    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 0 0% 15%;
+    --sidebar-ring: 160 84% 39%;
+  }
+
+  .dark {
+    --background: 0 0% 4%;
+    --foreground: 0 0% 95%;
+    --card: 0 0% 7%;
+    --card-foreground: 0 0% 95%;
+    --popover: 0 0% 7%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 160 84% 39%;
+    --primary-foreground: 0 0% 2%;
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 95%;
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 55%;
+    --accent: 160 84% 39%;
+    --accent-foreground: 0 0% 2%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
+    --ring: 160 84% 39%;
+    --sidebar-background: 0 0% 5%;
+    --sidebar-foreground: 0 0% 85%;
+    --sidebar-primary: 160 84% 39%;
+    --sidebar-primary-foreground: 0 0% 2%;
+    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 0 0% 15%;
+    --sidebar-ring: 160 84% 39%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  /* Monospace for code/terminal elements */
+  .font-mono {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  }
+}
+
+@layer components {
+  /* Terminal-style glow effects */
+  .glow-green {
+    box-shadow: 0 0 20px hsl(var(--terminal-green) / 0.15),
+                0 0 40px hsl(var(--terminal-green) / 0.05);
+  }
+  
+  .glow-green-subtle {
+    box-shadow: 0 0 10px hsl(var(--terminal-green) / 0.1);
+  }
+  
+  .text-glow-green {
+    text-shadow: 0 0 10px hsl(var(--terminal-green) / 0.5);
+  }
+  
+  /* Table row hover effect */
+  .table-row-hover {
+    @apply transition-all duration-200;
+  }
+  
+  .table-row-hover:hover {
+    @apply bg-surface-2;
+    box-shadow: inset 0 0 0 1px hsl(var(--border));
+  }
+  
+  /* Sidebar item styles */
+  .sidebar-item {
+    @apply relative px-4 py-3 cursor-pointer transition-all duration-200;
+  }
+  
+  .sidebar-item:hover {
+    @apply bg-surface-2;
+  }
+  
+  .sidebar-item.active {
+    @apply bg-surface-2;
+  }
+  
+  .sidebar-item.active::before {
+    content: '';
+    @apply absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-primary;
+  }
+  
+  /* Action button styles */
+  .action-btn {
+    @apply px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200;
+    @apply bg-surface-2 text-foreground border border-border;
+    @apply hover:bg-surface-3 hover:border-primary/50;
+  }
+  
+  .action-btn-primary {
+    @apply bg-primary text-primary-foreground border-primary;
+    @apply hover:bg-primary/90;
+  }
+  
+  /* Input terminal style */
+  .input-terminal {
+    @apply bg-surface-1 border border-border rounded-lg px-4 py-3;
+    @apply font-mono text-sm text-foreground placeholder:text-muted-foreground;
+    @apply focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50;
+    @apply transition-all duration-200;
+  }
+  
+  /* Card terminal style */
+  .card-terminal {
+    @apply bg-surface-1 border border-border rounded-lg overflow-hidden;
+  }
+  
+  /* Badge styles */
+  .badge-success {
+    @apply inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full;
+    @apply bg-emerald-500/10 text-emerald-400 border border-emerald-500/20;
+  }
+  
+  .badge-warning {
+    @apply inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full;
+    @apply bg-amber-500/10 text-amber-400 border border-amber-500/20;
+  }
+  
+  .badge-info {
+    @apply inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full;
+    @apply bg-cyan-500/10 text-cyan-400 border border-cyan-500/20;
+  }
+  
+  .badge-error {
+    @apply inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full;
+    @apply bg-red-500/10 text-red-400 border border-red-500/20;
+  }
+  
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-surface-0;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-surface-3 rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/30;
+  }
+}
+
+@layer utilities {
+  .bg-surface-0 { background-color: hsl(var(--surface-0)); }
+  .bg-surface-1 { background-color: hsl(var(--surface-1)); }
+  .bg-surface-2 { background-color: hsl(var(--surface-2)); }
+  .bg-surface-3 { background-color: hsl(var(--surface-3)); }
+  
+  .animate-pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out forwards;
+  }
+  
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}

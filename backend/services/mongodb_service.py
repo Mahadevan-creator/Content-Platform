@@ -157,3 +157,203 @@ def get_expert(github_username: str) -> Optional[Dict]:
     except Exception as e:
         print(f"❌ Error fetching expert {github_username} from MongoDB: {e}")
         return None
+
+
+def get_expert_by_email(email: str) -> Optional[Dict]:
+    """Get expert data from MongoDB by email address."""
+    collection = get_mongodb_collection()
+    if collection is None:
+        return None
+    
+    try:
+        result = collection.find_one({'email': email})
+        if result:
+            # Convert ObjectId to string for JSON serialization
+            if '_id' in result:
+                result['_id'] = str(result['_id'])
+            return result
+        return None
+    except Exception as e:
+        print(f"❌ Error fetching expert by email {email} from MongoDB: {e}")
+        return None
+
+
+def update_expert_interview(email: str, interview_report_url: str, interview_url: str = None) -> Optional[Dict]:
+    """
+    Update expert's interview information in MongoDB.
+    
+    Args:
+        email: Email address of the candidate
+        interview_report_url: URL to the interview report
+        interview_url: URL to the interview (optional)
+    
+    Returns:
+        Updated document or None if error
+    """
+    collection = get_mongodb_collection()
+    if collection is None:
+        print("⚠️  MongoDB client not available. Skipping interview update.")
+        return None
+    
+    try:
+        from datetime import datetime
+        current_time = datetime.utcnow().isoformat()
+        
+        # Find the expert by email
+        expert = collection.find_one({'email': email})
+        if not expert:
+            print(f"⚠️  Expert with email {email} not found in MongoDB")
+            return None
+        
+        # Prepare update data - handle nested workflow object properly
+        update_data = {
+            'updated_at': current_time,
+            'status': 'interviewing',
+            'interview_report_url': interview_report_url,
+        }
+        
+        if interview_url:
+            update_data['interview_url'] = interview_url
+        
+        # Get existing workflow or create default structure
+        existing_workflow = expert.get('workflow', {})
+        if not isinstance(existing_workflow, dict):
+            existing_workflow = {}
+        
+        # Preserve all existing workflow fields and update interview status
+        # Default workflow structure if missing fields
+        if 'emailSent' not in existing_workflow:
+            existing_workflow['emailSent'] = 'pending'
+        if 'testSent' not in existing_workflow:
+            existing_workflow['testSent'] = 'pending'
+        if 'interviewResult' not in existing_workflow:
+            existing_workflow['interviewResult'] = 'pending'
+        
+        # Update interview status to scheduled
+        existing_workflow['interview'] = 'scheduled'
+        update_data['workflow'] = existing_workflow
+        
+        # Update the document
+        result = collection.update_one(
+            {'email': email},
+            {'$set': update_data}
+        )
+        
+        if result.acknowledged and result.modified_count > 0:
+            # Fetch and return the updated document
+            updated_doc = collection.find_one({'email': email})
+            if updated_doc:
+                # Convert ObjectId to string for JSON serialization
+                if '_id' in updated_doc:
+                    updated_doc['_id'] = str(updated_doc['_id'])
+                print(f"✅ Successfully updated interview info for expert with email {email}")
+                return updated_doc
+            else:
+                print(f"⚠️  Update succeeded but could not retrieve document for email {email}")
+                return None
+        else:
+            print(f"⚠️  Update not acknowledged or no changes made for email {email}")
+            return None
+            
+    except Exception as e:
+        print(f"❌ Error updating interview info for expert with email {email}: {e}")
+        return None
+
+
+def update_expert_interview_completion(email: str, interview_status: str, interview_result: str = None, interview_id: str = None) -> Optional[Dict]:
+    """
+    Update expert's interview completion status and result in MongoDB.
+    
+    Args:
+        email: Email address of the candidate
+        interview_status: Status from HackerRank ('completed', 'in_progress', etc.)
+        interview_result: Result of the interview ('pass', 'fail', 'strong_pass', or None)
+        interview_id: HackerRank interview ID (optional, for tracking)
+    
+    Returns:
+        Updated document or None if error
+    """
+    collection = get_mongodb_collection()
+    if collection is None:
+        print("⚠️  MongoDB client not available. Skipping interview completion update.")
+        return None
+    
+    try:
+        from datetime import datetime
+        current_time = datetime.utcnow().isoformat()
+        
+        # Find the expert by email
+        expert = collection.find_one({'email': email})
+        if not expert:
+            print(f"⚠️  Expert with email {email} not found in MongoDB")
+            return None
+        
+        # Get existing workflow or create default structure
+        existing_workflow = expert.get('workflow', {})
+        if not isinstance(existing_workflow, dict):
+            existing_workflow = {}
+        
+        # Preserve all existing workflow fields
+        if 'emailSent' not in existing_workflow:
+            existing_workflow['emailSent'] = 'pending'
+        if 'testSent' not in existing_workflow:
+            existing_workflow['testSent'] = 'pending'
+        if 'interviewResult' not in existing_workflow:
+            existing_workflow['interviewResult'] = 'pending'
+        
+        # Update interview status based on HackerRank status
+        if interview_status == 'completed':
+            existing_workflow['interview'] = 'completed'
+        elif interview_status in ['in_progress', 'started']:
+            existing_workflow['interview'] = 'scheduled'  # Keep as scheduled if in progress
+        else:
+            # For other statuses, keep current state or default to scheduled
+            if 'interview' not in existing_workflow:
+                existing_workflow['interview'] = 'scheduled'
+        
+        # Update interview result if provided
+        if interview_result:
+            existing_workflow['interviewResult'] = interview_result
+            # Update overall status based on result
+            if interview_result in ['pass', 'strong_pass']:
+                # Keep status as 'interviewing' until manually moved to next stage
+                pass
+            elif interview_result == 'fail':
+                # Could optionally set status back to 'available' or keep as 'interviewing'
+                pass
+        
+        # Prepare update data
+        update_data = {
+            'updated_at': current_time,
+            'workflow': existing_workflow,
+        }
+        
+        # Store interview ID if provided
+        if interview_id:
+            update_data['interview_id'] = interview_id
+        
+        # Update the document
+        result = collection.update_one(
+            {'email': email},
+            {'$set': update_data}
+        )
+        
+        if result.acknowledged and result.modified_count > 0:
+            # Fetch and return the updated document
+            updated_doc = collection.find_one({'email': email})
+            if updated_doc:
+                # Convert ObjectId to string for JSON serialization
+                if '_id' in updated_doc:
+                    updated_doc['_id'] = str(updated_doc['_id'])
+                print(f"✅ Successfully updated interview completion for expert with email {email}: status={interview_status}, result={interview_result}")
+                return updated_doc
+            else:
+                print(f"⚠️  Update succeeded but could not retrieve document for email {email}")
+                return None
+        else:
+            print(f"⚠️  Update not acknowledged or no changes made for email {email}")
+            return None
+            
+    except Exception as e:
+        print(f"❌ Error updating interview completion for expert with email {email}: {e}")
+        return None

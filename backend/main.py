@@ -21,7 +21,7 @@ if _frontend_env.exists():
     load_dotenv(_frontend_env)
 
 from services.github_service import analyze_repository_contributors, get_github_token
-from services.mongodb_service import get_expert, get_mongodb_collection
+from services.mongodb_service import get_expert, get_expert_by_email, get_mongodb_collection, update_expert_interview, update_expert_interview_completion
 import logging
 
 app = FastAPI(title="Content Platform API", version="1.0.0")
@@ -224,7 +224,8 @@ async def get_job_status(job_id: str):
 @app.post("/api/interviews/create")
 @app.post("/api/interviews/create/")  # support with trailing slash
 async def create_interview(request: CreateInterviewRequest):
-    """Proxy to HackerRank POST /x/api/v3/interviews. Requires HACKERRANK_API_KEY in env."""
+    """Proxy to HackerRank POST /x/api/v3/interviews. Requires HACKERRANK_API_KEY in env.
+    Also updates candidate's MongoDB record with interview report URL and status."""
     import requests as req
     api_key = os.getenv("HACKERRANK_API_KEY")
     base_url = (os.getenv("HACKERRANK_API_BASE") or "https://www.hackerrank.com").rstrip("/")
@@ -242,10 +243,326 @@ async def create_interview(request: CreateInterviewRequest):
     try:
         r = req.post(url, json=payload, headers=headers, timeout=30)
         r.raise_for_status()
-        return r.json()
+        interview_response = r.json()
+        
+        # Update candidate's MongoDB record with interview information
+        candidate_email = request.candidate.email
+        if candidate_email and interview_response:
+            # Extract report_url and interview_id from response
+            report_url = interview_response.get('report_url')
+            interview_url = interview_response.get('url')
+            interview_id = interview_response.get('id')
+            
+            if report_url:
+                # Update MongoDB with interview report URL, status, and interview_id
+                update_result = update_expert_interview(
+                    email=candidate_email,
+                    interview_report_url=report_url,
+                    interview_url=interview_url
+                )
+                # Also store interview_id for future status checks
+                if update_result and interview_id:
+                    collection = get_mongodb_collection()
+                    if collection is not None:
+                        collection.update_one(
+                            {'email': candidate_email},
+                            {'$set': {'interview_id': interview_id}}
+                        )
+                if update_result:
+                    print(f"✅ Updated MongoDB record for candidate {candidate_email} with interview info (ID: {interview_id})")
+                else:
+                    print(f"⚠️  Failed to update MongoDB record for candidate {candidate_email}")
+            else:
+                print(f"⚠️  No report_url in interview response for candidate {candidate_email}")
+        
+        return interview_response
     except req.exceptions.RequestException as e:
         detail = getattr(e, "response", None) and getattr(e.response, "text", str(e)) or str(e)
         raise HTTPException(status_code=getattr(e, "response", None) and e.response.status_code or 502, detail=detail)
+
+
+@app.get("/api/interviews/{interview_id}")
+async def get_interview_status(interview_id: str):
+    """Get interview status from HackerRank API by interview ID."""
+    import requests as req
+    api_key = os.getenv("HACKERRANK_API_KEY")
+    base_url = (os.getenv("HACKERRANK_API_BASE") or "https://www.hackerrank.com").rstrip("/")
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="HackerRank API key not configured. Set HACKERRANK_API_KEY in environment."
+        )
+    url = f"{base_url}/x/api/v3/interviews/{interview_id}"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    try:
+        r = req.get(url, headers=headers, timeout=30)
+        r.raise_for_status()
+        interview_response = r.json()
+        return interview_response
+    except req.exceptions.RequestException as e:
+        detail = getattr(e, "response", None) and getattr(e.response, "text", str(e)) or str(e)
+        raise HTTPException(status_code=getattr(e, "response", None) and e.response.status_code or 502, detail=detail)
+
+
+class UpdateInterviewCompletionRequest(BaseModel):
+    email: str
+    interview_id: Optional[str] = None
+    interview_status: Optional[str] = None  # From HackerRank: 'completed', 'in_progress', etc.
+    interview_result: Optional[str] = None  # 'pass', 'fail', 'strong_pass'
+
+
+@app.post("/api/interviews/update-completion")
+async def update_interview_completion(request: UpdateInterviewCompletionRequest):
+    """Update interview completion status and result in MongoDB.
+    
+    This endpoint can be called:
+    1. Manually by admin to set pass/fail result
+    2. By a webhook from HackerRank (if configured)
+    3. By a polling job that checks interview status
+    """
+    try:
+        # If interview_id is provided, fetch latest status from HackerRank
+        interview_status = request.interview_status
+        if request.interview_id and not interview_status:
+            import requests as req
+            api_key = os.getenv("HACKERRANK_API_KEY")
+            base_url = (os.getenv("HACKERRANK_API_BASE") or "https://www.hackerrank.com").rstrip("/")
+            if api_key:
+                try:
+                    url = f"{base_url}/x/api/v3/interviews/{request.interview_id}"
+                    headers = {
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    }
+                    r = req.get(url, headers=headers, timeout=30)
+                    r.raise_for_status()
+                    interview_data = r.json()
+                    interview_status = interview_data.get('status')
+                    
+                    # Determine result from HackerRank data if not provided
+                    if not request.interview_result and interview_status == 'completed':
+                        # Check thumbs_up field (if available) or other indicators
+                        thumbs_up = interview_data.get('thumbs_up')
+                        if thumbs_up is True:
+                            request.interview_result = 'pass'
+                        elif thumbs_up is False:
+                            request.interview_result = 'fail'
+                except Exception as e:
+                    print(f"⚠️  Could not fetch interview status from HackerRank: {e}")
+        
+        # Update MongoDB with completion status and result
+        update_result = update_expert_interview_completion(
+            email=request.email,
+            interview_status=interview_status or 'completed',
+            interview_result=request.interview_result,
+            interview_id=request.interview_id
+        )
+        
+        if update_result:
+            return {
+                "success": True,
+                "message": f"Interview completion updated for {request.email}",
+                "data": update_result
+            }
+        else:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Expert with email {request.email} not found or update failed"
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating interview completion: {str(e)}")
+
+
+@app.post("/api/interviews/check-status")
+async def check_interview_status_by_email(email: str):
+    """Check interview status for a candidate by email.
+    
+    This endpoint:
+    1. Finds the candidate in MongoDB
+    2. Gets their interview_id (if stored)
+    3. Fetches latest status from HackerRank
+    4. Updates MongoDB with latest status and result
+    """
+    try:
+        # Get expert from MongoDB
+        expert = get_expert_by_email(email)
+        if not expert:
+            raise HTTPException(status_code=404, detail=f"Expert with email {email} not found")
+        
+        interview_id = expert.get('interview_id')
+        if not interview_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No interview_id found for candidate {email}. Interview may not have been created yet."
+            )
+        
+        # Fetch status from HackerRank
+        import requests as req
+        api_key = os.getenv("HACKERRANK_API_KEY")
+        base_url = (os.getenv("HACKERRANK_API_BASE") or "https://www.hackerrank.com").rstrip("/")
+        if not api_key:
+            raise HTTPException(
+                status_code=503,
+                detail="HackerRank API key not configured."
+            )
+        
+        url = f"{base_url}/x/api/v3/interviews/{interview_id}"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        
+        r = req.get(url, headers=headers, timeout=30)
+        r.raise_for_status()
+        interview_data = r.json()
+        
+        # Extract status and determine result
+        interview_status = interview_data.get('status', 'unknown')
+        interview_result = None
+        
+        # Determine result from HackerRank data
+        if interview_status == 'completed':
+            thumbs_up = interview_data.get('thumbs_up')
+            if thumbs_up is True:
+                interview_result = 'pass'
+            elif thumbs_up is False:
+                interview_result = 'fail'
+            # If thumbs_up is None, result stays None (pending manual review)
+        
+        # Update MongoDB
+        update_result = update_expert_interview_completion(
+            email=email,
+            interview_status=interview_status,
+            interview_result=interview_result,
+            interview_id=interview_id
+        )
+        
+        return {
+            "success": True,
+            "interview_status": interview_status,
+            "interview_result": interview_result,
+            "interview_data": interview_data,
+            "updated": update_result is not None
+        }
+    except HTTPException:
+        raise
+    except req.exceptions.RequestException as e:
+        detail = getattr(e, "response", None) and getattr(e.response, "text", str(e)) or str(e)
+        raise HTTPException(status_code=getattr(e, "response", None) and e.response.status_code or 502, detail=detail)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error checking interview status: {str(e)}")
+
+
+@app.post("/api/interviews/check-all-pending")
+async def check_all_pending_interviews():
+    """Check interview status for all candidates with scheduled interviews.
+    
+    This endpoint is designed to be called by a background job/cron.
+    It finds all experts with:
+    - interview_id set
+    - workflow.interview = 'scheduled'
+    
+    Then checks their status from HackerRank and updates MongoDB.
+    """
+    try:
+        collection = get_mongodb_collection()
+        if collection is None:
+            raise HTTPException(status_code=503, detail="MongoDB connection not available")
+        
+        # Find all experts with scheduled interviews
+        query = {
+            'interview_id': {'$exists': True, '$ne': None},
+            'workflow.interview': 'scheduled'
+        }
+        
+        experts_with_interviews = list(collection.find(query))
+        
+        if not experts_with_interviews:
+            return {
+                "success": True,
+                "message": "No pending interviews found",
+                "checked": 0,
+                "updated": 0
+            }
+        
+        import requests as req
+        api_key = os.getenv("HACKERRANK_API_KEY")
+        base_url = (os.getenv("HACKERRANK_API_BASE") or "https://www.hackerrank.com").rstrip("/")
+        
+        if not api_key:
+            raise HTTPException(status_code=503, detail="HackerRank API key not configured")
+        
+        checked_count = 0
+        updated_count = 0
+        errors = []
+        
+        for expert in experts_with_interviews:
+            try:
+                interview_id = expert.get('interview_id')
+                email = expert.get('email')
+                
+                if not interview_id or not email:
+                    continue
+                
+                # Fetch status from HackerRank
+                url = f"{base_url}/x/api/v3/interviews/{interview_id}"
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                }
+                
+                r = req.get(url, headers=headers, timeout=30)
+                r.raise_for_status()
+                interview_data = r.json()
+                
+                # Extract status and determine result
+                interview_status = interview_data.get('status', 'unknown')
+                interview_result = None
+                
+                if interview_status == 'completed':
+                    thumbs_up = interview_data.get('thumbs_up')
+                    if thumbs_up is True:
+                        interview_result = 'pass'
+                    elif thumbs_up is False:
+                        interview_result = 'fail'
+                
+                # Update MongoDB if status changed
+                if interview_status == 'completed':
+                    update_result = update_expert_interview_completion(
+                        email=email,
+                        interview_status=interview_status,
+                        interview_result=interview_result,
+                        interview_id=interview_id
+                    )
+                    if update_result:
+                        updated_count += 1
+                
+                checked_count += 1
+                
+            except Exception as e:
+                errors.append({
+                    "email": expert.get('email', 'unknown'),
+                    "error": str(e)
+                })
+                continue
+        
+        return {
+            "success": True,
+            "message": f"Checked {checked_count} interviews, updated {updated_count}",
+            "checked": checked_count,
+            "updated": updated_count,
+            "errors": errors if errors else None
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error checking pending interviews: {str(e)}")
 
 
 @app.post("/api/candidates/upload-csv", response_model=JobStatusResponse)

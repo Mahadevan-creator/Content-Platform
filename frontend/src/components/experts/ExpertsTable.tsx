@@ -12,7 +12,8 @@ import {
   Plus,
   Search,
   Filter,
-  X
+  X,
+  CheckCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getGitGrade, getGradeColor, getGradeBgColor } from '@/lib/gitScore';
@@ -97,7 +98,7 @@ const statusConfig = {
 const ITEMS_PER_PAGE = 15;
 
 export function ExpertsTable() {
-  const { experts: allExperts, loading, error } = useExperts();
+  const { experts: allExperts, loading, error, refetch } = useExperts();
   const [selectedExperts, setSelectedExperts] = useState<Set<string>>(new Set());
   const [viewingProfile, setViewingProfile] = useState<Expert | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -950,7 +951,7 @@ export function ExpertsTable() {
         currentResult={selectedExpert?.workflow?.interviewResult}
         onUpdate={() => {
           // Refresh experts list
-          window.location.reload();
+          refetch();
         }}
       />
       <SendContractModal 

@@ -220,33 +220,3 @@ export async function checkInterviewStatus(email: string): Promise<CheckIntervie
 
   return response.json();
 }
-
-export interface UpdateInterviewCompletionPayload {
-  email: string;
-  interview_id?: string;
-  interview_status?: string;
-  interview_result?: 'pass' | 'fail' | 'strong_pass';
-}
-
-export interface UpdateInterviewCompletionResponse {
-  success: boolean;
-  message: string;
-  data?: any;
-}
-
-export async function updateInterviewCompletion(
-  payload: UpdateInterviewCompletionPayload
-): Promise<UpdateInterviewCompletionResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/interviews/update-completion`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({ detail: response.statusText }));
-    throw new Error(typeof err.detail === 'string' ? err.detail : 'Failed to update interview completion');
-  }
-
-  return response.json();
-}

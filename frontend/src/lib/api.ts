@@ -220,3 +220,37 @@ export async function checkInterviewStatus(email: string): Promise<CheckIntervie
 
   return response.json();
 }
+
+// HackerRank Test API
+export interface SendTestPayload {
+  test_id: string;
+  candidate_email: string;
+  candidate_name?: string;
+  send_email?: boolean;
+  test_result_url?: string;
+  subject?: string;
+  message?: string;
+}
+
+export interface SendTestResponse {
+  success: boolean;
+  message: string;
+  test_link?: string;
+  candidate_id?: string;
+  email?: string;
+}
+
+export async function sendTestToCandidate(payload: SendTestPayload): Promise<SendTestResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/tests/send`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(typeof err.detail === 'string' ? err.detail : 'Failed to send test invite');
+  }
+
+  return response.json();
+}

@@ -62,7 +62,7 @@ export interface ExpertWithDisplay extends Expert {
   name: string;
   email: string;
   role: string;
-  status: 'available' | 'interviewing' | 'onboarded' | 'contracted';
+  status: 'available' | 'assessment' | 'interviewing' | 'onboarded' | 'contracted';
   skills: string[];
   rating: number;
   gitScore: number;
@@ -100,7 +100,7 @@ export function useExperts() {
         name: (expert as any).display_name || expert.github_username,
         email: expert.email || '',
         role: 'Developer',  // Can be updated later if needed
-        status: ((expert as any).status || 'available') as 'available' | 'interviewing' | 'onboarded' | 'contracted',
+        status: ((expert as any).status || 'available') as 'available' | 'assessment' | 'interviewing' | 'onboarded' | 'contracted',
         skills: expert.tech_stack || [],
         rating: expert.git_score || 0,
         gitScore: expert.git_score || 0,

@@ -314,6 +314,16 @@ class UpdateInterviewCompletionRequest(BaseModel):
     interview_result: Optional[str] = None  # 'pass', 'fail', 'strong_pass'
 
 
+class SendTestRequest(BaseModel):
+    test_id: str  # HackerRank test ID
+    candidate_email: str
+    candidate_name: Optional[str] = None
+    send_email: Optional[bool] = True
+    test_result_url: Optional[str] = None  # Webhook URL for test results
+    subject: Optional[str] = None
+    message: Optional[str] = None
+
+
 @app.post("/api/interviews/update-completion")
 async def update_interview_completion(request: UpdateInterviewCompletionRequest):
     """Update interview completion status and result in MongoDB.
@@ -462,6 +472,148 @@ async def check_interview_status_by_email(email: str):
             detail = getattr(e, "response", None) and getattr(e.response, "text", str(e)) or str(e)
             raise HTTPException(status_code=getattr(e, "response", None) and e.response.status_code or 502, detail=detail)
         raise HTTPException(status_code=500, detail=f"Error checking interview status: {str(e)}")
+
+
+@app.post("/api/tests/send")
+async def send_test_to_candidate(request: SendTestRequest):
+    """Send a HackerRank test invite to a candidate.
+    
+    This endpoint:
+    1. Invites candidate to the test via HackerRank API
+    2. Updates MongoDB with test information
+    3. Updates workflow status
+    """
+    import requests as req
+    api_key = os.getenv("HACKERRANK_API_KEY")
+    base_url = (os.getenv("HACKERRANK_API_BASE") or "https://www.hackerrank.com").rstrip("/")
+    
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="HackerRank API key not configured. Set HACKERRANK_API_KEY in environment."
+        )
+    
+    # Prepare payload for HackerRank API
+    payload = {
+        "email": request.candidate_email,
+        "send_email": request.send_email or True,
+    }
+    
+    if request.candidate_name:
+        payload["full_name"] = request.candidate_name
+    
+    if request.subject:
+        payload["subject"] = request.subject
+    
+    if request.message:
+        payload["message"] = request.message
+    
+    if request.test_result_url:
+        payload["test_result_url"] = request.test_result_url
+        payload["accept_result_updates"] = True
+    
+    url = f"{base_url}/x/api/v3/tests/{request.test_id}/candidates"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    
+    # Log request details for debugging
+    print(f"📧 Sending test invite: test_id={request.test_id}, email={request.candidate_email}")
+    print(f"   URL: {url}")
+    
+    try:
+        r = req.post(url, json=payload, headers=headers, timeout=30)
+        r.raise_for_status()
+        test_response = r.json()
+        print(f"✅ HackerRank API response: {test_response}")
+        
+        # Update candidate's MongoDB record with test information
+        collection = get_mongodb_collection()
+        if collection is not None:
+            from datetime import datetime
+            current_time = datetime.utcnow().isoformat()
+            
+            # Get existing expert
+            expert = collection.find_one({'email': request.candidate_email})
+            if expert:
+                # Get existing workflow or create default structure
+                existing_workflow = expert.get('workflow', {})
+                if not isinstance(existing_workflow, dict):
+                    existing_workflow = {}
+                
+                # Preserve all existing workflow fields
+                if 'emailSent' not in existing_workflow:
+                    existing_workflow['emailSent'] = 'pending'
+                if 'interview' not in existing_workflow:
+                    existing_workflow['interview'] = 'pending'
+                if 'interviewResult' not in existing_workflow:
+                    existing_workflow['interviewResult'] = 'pending'
+                
+                # Update test status
+                existing_workflow['testSent'] = 'sent'
+                
+                # Prepare update data
+                # Set status to 'assessment' when test is sent (candidate is in test/assessment phase)
+                update_data = {
+                    'updated_at': current_time,
+                    'status': 'assessment',
+                    'workflow': existing_workflow,
+                    'test_id': request.test_id,
+                    'test_link': test_response.get('test_link'),
+                    'test_candidate_id': test_response.get('id'),
+                }
+                
+                # Update the document
+                collection.update_one(
+                    {'email': request.candidate_email},
+                    {'$set': update_data}
+                )
+                print(f"✅ Updated MongoDB record for candidate {request.candidate_email} with test info")
+        
+        return {
+            "success": True,
+            "message": f"Test invite sent to {request.candidate_email}",
+            "test_link": test_response.get('test_link'),
+            "candidate_id": test_response.get('id'),
+            "email": test_response.get('email'),
+        }
+    except req.exceptions.HTTPError as e:
+        error_detail = f"HackerRank API error: {e.response.status_code}"
+        error_text = ""
+        try:
+            error_text = e.response.text
+            error_json = e.response.json()
+            print(f"❌ HackerRank API error response: {error_json}")
+            
+            # Extract error message from various possible formats
+            if 'errors' in error_json and isinstance(error_json['errors'], list) and len(error_json['errors']) > 0:
+                # HackerRank often returns errors as a list
+                error_detail = f"HackerRank API error: {error_json['errors'][0]}"
+            elif 'message' in error_json:
+                error_detail = f"HackerRank API error: {error_json['message']}"
+            elif 'error' in error_json:
+                if isinstance(error_json['error'], str):
+                    error_detail = f"HackerRank API error: {error_json['error']}"
+                elif isinstance(error_json['error'], dict) and 'message' in error_json['error']:
+                    error_detail = f"HackerRank API error: {error_json['error']['message']}"
+            else:
+                error_detail = f"HackerRank API error ({e.response.status_code}): {error_text[:200]}"
+        except Exception as parse_error:
+            print(f"❌ HackerRank API error (raw): {error_text}")
+            print(f"❌ Error parsing response: {parse_error}")
+        print(f"❌ Full error: {error_detail}")
+        raise HTTPException(status_code=502, detail=error_detail)
+    except req.exceptions.RequestException as e:
+        error_msg = f"Failed to connect to HackerRank API: {str(e)}"
+        print(f"❌ Request exception: {error_msg}")
+        raise HTTPException(status_code=502, detail=error_msg)
+    except Exception as e:
+        error_msg = f"Error sending test invite: {str(e)}"
+        print(f"❌ Unexpected error: {error_msg}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 class HackerRankWebhookPayload(BaseModel):

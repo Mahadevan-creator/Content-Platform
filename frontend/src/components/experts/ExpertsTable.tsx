@@ -90,6 +90,7 @@ const workflowLabels = {
 
 const statusConfig = {
   available: { label: 'Available', className: 'badge-success' },
+  assessment: { label: 'Assessment', className: 'badge-warning' },
   interviewing: { label: 'Interviewing', className: 'badge-warning' },
   onboarded: { label: 'Onboarded', className: 'badge-info' },
   contracted: { label: 'Contracted', className: 'badge-success' },
@@ -935,6 +936,10 @@ export function ExpertsTable() {
         open={testModalOpen} 
         onOpenChange={setTestModalOpen}
         candidateName={selectedExpert?.name}
+        candidateEmail={selectedExpert?.email}
+        onTestSent={() => {
+          refetch(); // Refresh experts list after test is sent
+        }}
       />
       <ScheduleInterviewModal 
         open={interviewModalOpen} 

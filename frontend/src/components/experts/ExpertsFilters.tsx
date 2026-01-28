@@ -34,7 +34,7 @@ export interface FilterState {
   locations: Set<string>;
   skills: Set<string>;
   emailFound: 'all' | 'found' | 'not-found';
-  status: Set<'available' | 'interviewing' | 'onboarded' | 'contracted'>;
+  status: Set<'available' | 'assessment' | 'interviewing' | 'onboarded' | 'contracted'>;
   gitGrades: Set<string>;
   interviewResult: 'all' | 'pass' | 'fail' | 'strong_pass';
   hrwScoreRange: [number, number];
@@ -60,6 +60,7 @@ interface ExpertsFiltersProps {
 const gitGradeOptions = ['A+', 'A', 'B+', 'B', 'C+', 'C', 'D+', 'D', 'F'];
 const statusOptions = [
   { value: 'available' as const, label: 'Available' },
+  { value: 'assessment' as const, label: 'Assessment' },
   { value: 'interviewing' as const, label: 'Interviewing' },
   { value: 'onboarded' as const, label: 'Onboarded' },
   { value: 'contracted' as const, label: 'Contracted' },
@@ -207,7 +208,7 @@ export function ExpertsFilters({ experts, filters, onFiltersChange, onClearFilte
     updateFilters({ skills: newSkills });
   };
 
-  const toggleStatus = (status: 'available' | 'interviewing' | 'onboarded' | 'contracted') => {
+  const toggleStatus = (status: 'available' | 'assessment' | 'interviewing' | 'onboarded' | 'contracted') => {
     const newStatus = new Set(filters.status);
     if (newStatus.has(status)) {
       newStatus.delete(status);

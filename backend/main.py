@@ -61,6 +61,9 @@ class AnalyzeRepoRequest(BaseModel):
 class AnalyzeReposRequest(BaseModel):
     repo_urls: List[str]
 
+class AddUsernamesRequest(BaseModel):
+    usernames: List[str]
+
 class JobStatusResponse(BaseModel):
     job_id: str
     status: str  # "pending", "processing", "completed", "failed"
@@ -843,6 +846,37 @@ async def upload_csv_candidates(
             csv_file_path.unlink()
         raise HTTPException(status_code=500, detail=f"Error uploading file: {str(e)}")
 
+
+@app.post("/api/candidates/add-usernames", response_model=JobStatusResponse)
+async def add_usernames_candidates(
+    request: AddUsernamesRequest,
+    background_tasks: BackgroundTasks = None
+):
+    """Add candidates by GitHub usernames - EXACT same flow as CSV and repo-based"""
+    usernames = [u.strip() for u in request.usernames if u and str(u).strip()]
+    if not usernames:
+        raise HTTPException(status_code=400, detail="At least one username is required")
+    # Limit to 10 like CSV
+    usernames = usernames[:10]
+
+    job_id = str(uuid.uuid4())
+    job_status[job_id] = {
+        "status": "pending",
+        "progress": 0.0,
+        "current_repo": None,
+        "message": "Starting usernames processing...",
+        "result": None,
+        "error": None
+    }
+    background_tasks.add_task(process_usernames_candidates, job_id, usernames)
+    return JobStatusResponse(
+        job_id=job_id,
+        status="pending",
+        progress=0.0,
+        message="Usernames processing started"
+    )
+
+
 async def process_repository_analysis(job_id: str, repo_url: str):
     """Process a single repository analysis"""
     try:
@@ -978,6 +1012,65 @@ async def process_csv_candidates(job_id: str, csv_file_path: str):
         if csv_path.exists():
             csv_path.unlink()
 
+
+async def process_usernames_candidates(job_id: str, usernames: List[str]):
+    """Process candidates from GitHub usernames list - EXACT same flow as CSV and repo-based"""
+    try:
+        job_status[job_id]["status"] = "processing"
+        job_status[job_id]["progress"] = 10.0
+        job_status[job_id]["message"] = "Getting top 3 PRs for each username (same as repo-based flow)..."
+
+        import importlib.util
+        calculate_scores_path = Path(__file__).parent / "calculate_git_scores.py"
+        spec = importlib.util.spec_from_file_location("calculate_git_scores", calculate_scores_path)
+        calculate_git_scores_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(calculate_git_scores_module)
+        get_top_3_prs_for_user = calculate_git_scores_module.get_top_3_prs_for_user
+
+        result = {}
+        total_candidates = len(usernames)
+        loop = asyncio.get_event_loop()
+
+        for idx, username in enumerate(usernames):
+            try:
+                progress = 10 + (idx / total_candidates) * 60
+                job_status[job_id]["progress"] = progress
+                job_status[job_id]["message"] = f"Getting top 3 PRs for {username} ({idx+1}/{total_candidates})..."
+
+                top_3_prs = await loop.run_in_executor(
+                    None,
+                    get_top_3_prs_for_user,
+                    username
+                )
+                pr_links = []
+                for pr in top_3_prs:
+                    pr_url = pr.get('html_url', '')
+                    if pr_url:
+                        pr_links.append(pr_url)
+                result[username] = {"PR_LINKS": pr_links}
+            except Exception as e:
+                logging.warning(f"Error processing {username}: {e}")
+                result[username] = {"PR_LINKS": []}
+
+        job_status[job_id]["progress"] = 70.0
+        job_status[job_id]["message"] = "Saving results and calling fetch_prs_from_json.py (same as repo-based flow)..."
+
+        save_results_to_json(job_id, None, result, None, None, usernames)
+
+        job_status[job_id]["status"] = "completed"
+        job_status[job_id]["progress"] = 100.0
+        job_status[job_id]["message"] = f"Usernames processing completed. Found {len(usernames)} candidates. PR analysis running in background (same as repo-based flow)..."
+        job_status[job_id]["result"] = {
+            "total_candidates": len(usernames),
+            "candidates": list(result.keys()),
+            "note": "Same flow as repo-based: fetch_prs_from_json.py → calculate_git_scores.py → MongoDB"
+        }
+    except Exception as e:
+        job_status[job_id]["status"] = "failed"
+        job_status[job_id]["error"] = str(e)
+        job_status[job_id]["message"] = f"Usernames processing failed: {str(e)}"
+
+
 async def process_multiple_repositories(job_id: str, repo_urls: List[str]):
     """Process multiple repository analyses"""
     try:
@@ -1060,7 +1153,7 @@ def format_analysis_results(analyses: List[Dict], repo_url: Optional[str] = None
     
     return result
 
-def save_results_to_json(job_id: str, repo_url: Optional[str], result: Dict, repo_urls: Optional[List[str]] = None, csv_file: Optional[str] = None):
+def save_results_to_json(job_id: str, repo_url: Optional[str], result: Dict, repo_urls: Optional[List[str]] = None, csv_file: Optional[str] = None, usernames_list: Optional[List[str]] = None):
     """Save analysis results to a JSON file and call fetch_prs_from_json.py"""
     try:
         # Create results directory if it doesn't exist
@@ -1073,6 +1166,9 @@ def save_results_to_json(job_id: str, repo_url: Optional[str], result: Dict, rep
             # CSV input
             csv_name = Path(csv_file).stem
             filename = f"analysis_csv_{csv_name}_{timestamp}_{job_id[:8]}.json"
+        elif usernames_list is not None:
+            # Usernames input
+            filename = f"analysis_usernames_{timestamp}_{job_id[:8]}.json"
         elif repo_url:
             # Single repo - extract repo name from URL
             repo_name = repo_url.split("/")[-1].replace(".git", "")
@@ -1094,6 +1190,7 @@ def save_results_to_json(job_id: str, repo_url: Optional[str], result: Dict, rep
             "repo_url": repo_url,
             "repo_urls": repo_urls,
             "csv_file": csv_file,
+            "usernames_list": usernames_list,
             "total_contributors": total_contributors,
             "results": result
         }

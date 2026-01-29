@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { analyzeRepositories, pollJobStatus, uploadCsvCandidates, type JobStatus, type ContributorAnalysis } from '@/lib/api';
+import { analyzeRepositories, pollJobStatus, uploadCsvCandidates, addUsernamesCandidates, type JobStatus, type ContributorAnalysis } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { ProcessingNotification } from './ProcessingNotification';
 
@@ -129,16 +129,55 @@ export function AddExpertsModal({ open, onOpenChange, onContributorsAnalyzed, on
     }
   };
 
-  const handleSubmitUsernames = () => {
-    if (usernames.trim()) {
-      const parsedUsernames = usernames
-        .split(',')
-        .map(u => u.trim())
-        .filter(u => u.length > 0);
-      console.log('Adding GitHub usernames:', parsedUsernames);
-      // Handle username import
+  const handleSubmitUsernames = async () => {
+    const parsedUsernames = usernames
+      .split(',')
+      .map(u => u.trim())
+      .filter(u => u.length > 0);
+    if (parsedUsernames.length === 0) return;
+
+    setIsAnalyzing(true);
+    setError(null);
+
+    try {
+      const jobStatus = await addUsernamesCandidates(parsedUsernames);
+      if (onJobStarted) {
+        onJobStarted(jobStatus.job_id);
+      }
+      toast({
+        title: 'Usernames import started',
+        description: 'Processing candidates from GitHub usernames. You can continue working...',
+      });
       onOpenChange(false);
       setUsernames('');
+      setIsAnalyzing(false);
+
+      pollJobStatus(jobStatus.job_id, () => {}, 2000)
+        .then((finalStatus) => {
+          if (finalStatus.result) {
+            toast({
+              title: 'Usernames processing complete',
+              description: `Successfully processed ${finalStatus.result.total_candidates ?? 0} candidates from usernames`,
+            });
+          }
+        })
+        .catch((err) => {
+          const msg = err instanceof Error ? err.message : 'An unexpected error occurred';
+          toast({
+            title: 'Usernames processing failed',
+            description: msg,
+            variant: 'destructive',
+          });
+        });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'An unexpected error occurred';
+      setError(msg);
+      toast({
+        title: 'Usernames import failed',
+        description: msg,
+        variant: 'destructive',
+      });
+      setIsAnalyzing(false);
     }
   };
 
@@ -334,16 +373,31 @@ export function AddExpertsModal({ open, onOpenChange, onContributorsAnalyzed, on
                 className="min-h-[120px] bg-surface-2 border-border font-mono text-sm resize-none"
               />
               <p className="text-xs text-muted-foreground">
-                Enter GitHub usernames separated by commas. We'll fetch their profile data and contribution metrics.
+                Enter GitHub usernames separated by commas. We'll process up to 10 candidates, analyze their top 3 PRs, and calculate their git scores (same flow as CSV and repos).
               </p>
             </div>
+            {error && (
+              <Alert variant="destructive" className="bg-terminal-red/10 border-terminal-red/20">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-sm">{error}</AlertDescription>
+              </Alert>
+            )}
             <Button
               onClick={handleSubmitUsernames}
-              disabled={!usernames.trim()}
+              disabled={!usernames.trim() || isAnalyzing}
               className="w-full"
             >
-              <Users className="w-4 h-4 mr-2" />
-              Import {usernames.split(',').filter(u => u.trim()).length || 0} Expert(s)
+              {isAnalyzing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <Users className="w-4 h-4 mr-2" />
+                  Import {usernames.split(',').filter(u => u.trim()).length || 0} Expert(s)
+                </>
+              )}
             </Button>
           </TabsContent>
           

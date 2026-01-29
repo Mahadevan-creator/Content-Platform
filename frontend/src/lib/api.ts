@@ -116,6 +116,21 @@ export async function uploadCsvCandidates(file: File): Promise<JobStatus> {
   return response.json();
 }
 
+export async function addUsernamesCandidates(usernames: string[]): Promise<JobStatus> {
+  const response = await fetch(`${API_BASE_URL}/api/candidates/add-usernames`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usernames }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to add usernames: ${errorText || response.statusText}`);
+  }
+
+  return response.json();
+}
+
 // HackerRank Interview API (proxied via backend)
 export interface InterviewerItem {
   email: string;

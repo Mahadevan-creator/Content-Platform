@@ -181,8 +181,16 @@ const categorizeMetrics = (metrics: any, summaries: any) => {
 export function CandidateProfile({ expert, onBack }: CandidateProfileProps) {
   const gitScore = expert.gitScore || 0;
   const gitGrade = getGitGrade(gitScore);
-  const hrwScore = expert.hrwScore || 0;
+  const hrwScore = (expert as any).hrwScore ?? (expert as any).hrw_score ?? 0;
   
+  // HRW test report URL - from MongoDB (test_report_url) or construct from test_id + test_candidate_id
+  const testId = (expert as any).test_id;
+  const testCandidateId = (expert as any).test_candidate_id;
+  const hrwTestReportUrl = (expert as any).test_report_url
+    || (testId && testCandidateId
+      ? `https://www.hackerrank.com/work/tests/${testId}/candidates/${testCandidateId}`
+      : null);
+  const hasHrwReportUrl = hrwTestReportUrl && hrwTestReportUrl.startsWith('http');
   
   // Social links from MongoDB
   const socialLinks = {
@@ -192,12 +200,8 @@ export function CandidateProfile({ expert, onBack }: CandidateProfileProps) {
     github: expert.github_profile_url || `https://github.com/${expert.github_username || ''}`,
   };
   
-  // Report links - HRW Report always shown (static placeholder for now), Interview Report when we have a real URL
-  const interviewReportUrl = expert.interview_report_url || expert.interviewReportUrl;
-  const reportLinks = {
-    hrwTestReport: expert.hrwTestReportUrl || 'https://example.com/hrw-test-report',
-    interviewReport: interviewReportUrl,
-  };
+  // Report links - Interview Report when we have a real URL
+  const interviewReportUrl = expert.interview_report_url || (expert as any).interviewReportUrl;
   
   // Interview Report link only when we have a real URL from MongoDB
   const hasRealInterviewReport = interviewReportUrl &&
@@ -333,24 +337,37 @@ export function CandidateProfile({ expert, onBack }: CandidateProfileProps) {
             <span className="text-sm text-muted-foreground font-mono uppercase">HRW Score</span>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-4xl font-bold text-terminal-amber">{hrwScore}</span>
+            {hasHrwReportUrl ? (
+              <a
+                href={hrwTestReportUrl!}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-4xl font-bold text-terminal-amber hover:text-terminal-amber/80 hover:underline transition-colors"
+              >
+                {hrwScore}
+              </a>
+            ) : (
+              <span className="text-4xl font-bold text-terminal-amber">{hrwScore}</span>
+            )}
             <span className="text-muted-foreground">/ 100</span>
           </div>
-          {/* Report Links inside HRW Score tile - HRW Report always shown (static for now), Interview Report when scheduled */}
+          {/* Report Links - HRW Report when test was sent, Interview Report when scheduled */}
           <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-border">
-            <a
-              href={reportLinks.hrwTestReport}
+            {hasHrwReportUrl && (
+              <a
+                href={hrwTestReportUrl!}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1.5 px-2.5 py-1.5 bg-terminal-amber/10 rounded border border-terminal-amber/20 hover:bg-terminal-amber/20 transition-colors group"
             >
               <FileText className="w-3.5 h-3.5 text-terminal-amber" />
-              <span className="text-xs font-medium text-terminal-amber">HRW Report</span>
+              <span className="text-xs font-medium text-terminal-amber">View Test Report</span>
               <ExternalLink className="w-3 h-3 text-terminal-amber/60 group-hover:text-terminal-amber transition-colors" />
             </a>
+            )}
             {hasRealInterviewReport && (
               <a
-                href={reportLinks.interviewReport!}
+                href={interviewReportUrl!}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1.5 px-2.5 py-1.5 bg-terminal-cyan/10 rounded border border-terminal-cyan/20 hover:bg-terminal-cyan/20 transition-colors group"

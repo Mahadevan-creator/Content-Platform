@@ -27,47 +27,45 @@ interface SendTestModalProps {
   onTestSent?: () => void;
 }
 
-// HackerRank Test IDs and public links
+// HackerRank Test IDs and links (SME hiring tests)
 const availableTests = [
   { 
-    id: '2272456', 
-    name: 'Django', 
-    publicLink: 'https://hr.gs/django-hiring-test',
-    duration: '90 mins', 
-    difficulty: 'Medium' 
-  },
-  { 
-    id: '2272490', 
-    name: 'Spring Boot', 
-    publicLink: 'https://hr.gs/springboot-hiring-test',
-    duration: '90 mins', 
-    difficulty: 'Medium' 
-  },
-  { 
-    id: '2272509', 
-    name: 'Go', 
-    publicLink: 'https://hr.gs/go-hiring-test',
-    duration: '90 mins', 
-    difficulty: 'Medium' 
-  },
-  { 
-    id: '2272505', 
-    name: '.NET', 
-    publicLink: 'https://hr.gs/dotnet-hiring-test',
-    duration: '90 mins', 
-    difficulty: 'Medium' 
-  },
-  { 
-    id: '2272500', 
-    name: 'Angular', 
-    publicLink: 'https://hr.gs/angular-hiring-test',
-    duration: '90 mins', 
-    difficulty: 'Medium' 
-  },
-  { 
     id: '2291170', 
-    name: 'Frontend', 
-    publicLink: 'https://www.hackerrank.com/work/tests/2291170/questions',
+    name: 'Django', 
+    publicLink: 'https://hr.gs/django-sme-hiring-test',
+    privateLink: 'https://www.hackerrank.com/work/tests/2291170/questions',
+    duration: '90 mins', 
+    difficulty: 'Medium' 
+  },
+  { 
+    id: '2288233', 
+    name: 'Spring Boot', 
+    publicLink: 'https://hr.gs/springboot-sme-hiring-test',
+    privateLink: 'https://www.hackerrank.com/work/tests/2288233/questions',
+    duration: '90 mins', 
+    difficulty: 'Medium' 
+  },
+  { 
+    id: '2291652', 
+    name: 'Go', 
+    publicLink: 'https://hr.gs/go-sme-hiring-test',
+    privateLink: 'https://www.hackerrank.com/work/tests/2291652/questions',
+    duration: '90 mins', 
+    difficulty: 'Medium' 
+  },
+  { 
+    id: '2291659', 
+    name: '.NET', 
+    publicLink: 'https://hr.gs/dotnet-sme-hiring-test',
+    privateLink: 'https://www.hackerrank.com/work/tests/2291659/questions',
+    duration: '90 mins', 
+    difficulty: 'Medium' 
+  },
+  { 
+    id: '2291661', 
+    name: 'Angular', 
+    publicLink: 'https://hr.gs/angular-sme-hiring-test',
+    privateLink: 'https://www.hackerrank.com/work/tests/2291661/questions',
     duration: '90 mins', 
     difficulty: 'Medium' 
   },
@@ -239,16 +237,31 @@ export function SendTestModal({
                       }`}>{selectedTestDetails.difficulty}</span>
                     </span>
                   </div>
-                  <div className="mt-2">
-                    <Label className="text-xs text-muted-foreground">Public Link:</Label>
-                    <a
-                      href={selectedTestDetails.publicLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-primary hover:underline block mt-1"
-                    >
-                      {selectedTestDetails.publicLink}
-                    </a>
+                  <div className="mt-2 space-y-2">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Public Link:</Label>
+                      <a
+                        href={selectedTestDetails.publicLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline block mt-1"
+                      >
+                        {selectedTestDetails.publicLink}
+                      </a>
+                    </div>
+                    {selectedTestDetails.privateLink && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Private Link:</Label>
+                        <a
+                          href={selectedTestDetails.privateLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-primary hover:underline block mt-1"
+                        >
+                          {selectedTestDetails.privateLink}
+                        </a>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

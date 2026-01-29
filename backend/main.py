@@ -474,6 +474,13 @@ async def send_test_to_candidate(request: SendTestRequest):
                 # Update test status
                 existing_workflow['testSent'] = 'sent'
                 
+                # Build test report URL for viewing candidate's results in HackerRank Work
+                test_candidate_id = test_response.get('id')
+                test_report_url = None
+                if request.test_id and test_candidate_id:
+                    base = (os.getenv("HACKERRANK_API_BASE") or "https://www.hackerrank.com").rstrip("/")
+                    test_report_url = f"{base}/work/tests/{request.test_id}/candidates/{test_candidate_id}"
+                
                 # Prepare update data
                 # Set status to 'assessment' when test is sent (candidate is in test/assessment phase)
                 update_data = {
@@ -482,7 +489,8 @@ async def send_test_to_candidate(request: SendTestRequest):
                     'workflow': existing_workflow,
                     'test_id': request.test_id,
                     'test_link': test_response.get('test_link'),
-                    'test_candidate_id': test_response.get('id'),
+                    'test_candidate_id': test_candidate_id,
+                    'test_report_url': test_report_url,
                 }
                 
                 # Update the document

@@ -357,3 +357,88 @@ def update_expert_interview_completion(email: str, interview_status: str, interv
     except Exception as e:
         print(f"❌ Error updating interview completion for expert with email {email}: {e}")
         return None
+
+
+def update_expert_assessment_completion(
+    email: str,
+    assessment_result: str,  # 'passed' or 'failed'
+    hrw_score: float,
+    test_id: str = None,
+    test_candidate_id: str = None
+) -> Optional[Dict]:
+    """
+    Update expert's assessment (HackerRank test) completion in MongoDB.
+    
+    Args:
+        email: Email address of the candidate
+        assessment_result: 'passed' (score>=75 and no plagiarism) or 'failed'
+        hrw_score: The HackerRank test score (0-100)
+        test_id: HackerRank test ID (optional, for tracking)
+        test_candidate_id: HackerRank test candidate ID (optional, for tracking)
+    
+    Returns:
+        Updated document or None if error
+    """
+    collection = get_mongodb_collection()
+    if collection is None:
+        print("⚠️  MongoDB client not available. Skipping assessment completion update.")
+        return None
+    
+    try:
+        from datetime import datetime
+        current_time = datetime.utcnow().isoformat()
+        
+        expert = collection.find_one({'email': email})
+        if not expert:
+            print(f"⚠️  Expert with email {email} not found in MongoDB")
+            return None
+        
+        existing_workflow = expert.get('workflow', {})
+        if not isinstance(existing_workflow, dict):
+            existing_workflow = {}
+        
+        if 'emailSent' not in existing_workflow:
+            existing_workflow['emailSent'] = 'pending'
+        if 'interview' not in existing_workflow:
+            existing_workflow['interview'] = 'pending'
+        if 'interviewResult' not in existing_workflow:
+            existing_workflow['interviewResult'] = 'pending'
+        
+        # Update testSent: 'sent' -> 'passed' or 'failed' based on assessment result
+        existing_workflow['testSent'] = assessment_result  # 'passed' or 'failed'
+        
+        update_data = {
+            'updated_at': current_time,
+            'workflow': existing_workflow,
+            'hrw_score': hrw_score,
+        }
+        
+        if test_id:
+            update_data['test_id'] = test_id
+        if test_candidate_id:
+            update_data['test_candidate_id'] = test_candidate_id
+        
+        # If passed, keep status as 'assessment' (or could move to 'available' for next stage)
+        # If failed, keep status as 'assessment' - user can manually move if needed
+        # Don't change status here - let workflow reflect the result
+        
+        result = collection.update_one(
+            {'email': email},
+            {'$set': update_data}
+        )
+        
+        if result.acknowledged and result.modified_count > 0:
+            updated_doc = collection.find_one({'email': email})
+            if updated_doc:
+                if '_id' in updated_doc:
+                    updated_doc['_id'] = str(updated_doc['_id'])
+                print(f"✅ Updated assessment for {email}: {assessment_result} (score={hrw_score})")
+                return updated_doc
+            return None
+        else:
+            print(f"⚠️  Update not acknowledged or no changes for {email}")
+            return None
+            
+    except Exception as e:
+        print(f"❌ Error updating assessment for {email}: {e}")
+        return None

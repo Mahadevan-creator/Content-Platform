@@ -114,3 +114,31 @@ Then install python-dotenv and load it in main.py (already included in requireme
 # Add to ~/.zshrc or ~/.bashrc
 export GITHUB_TOKEN=your_token_here
 ```
+
+## Background Pollers
+
+Run these in separate terminals (or as separate processes) for interview and test status updates.
+
+### Interview Poller
+Polls HackerRank every 30 minutes for interview status. Updates MongoDB when interviews complete.
+```bash
+# From project root:
+cd backend && python3 services/interview_poller.py
+
+# Or if already in backend directory:
+python3 services/interview_poller.py
+```
+
+### Test (Assessment) Poller
+Polls HackerRank every 30 minutes for test results. Candidates with status `assessment` are checked.
+- **Pass**: score >= 75 AND plagiarism is false
+- **Fail**: score < 75 OR plagiarism detected
+```bash
+# From project root:
+cd backend && python3 services/test_poller.py
+
+# Or if already in backend directory:
+python3 services/test_poller.py
+```
+
+Requires `HACKERRANK_API_KEY` in `.env`.

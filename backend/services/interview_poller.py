@@ -3,6 +3,7 @@ Background service to poll HackerRank API for interview status updates.
 Runs every 30 minutes and checks all candidates with scheduled interviews.
 """
 import os
+import re
 import time
 import requests
 import logging
@@ -65,26 +66,64 @@ def check_interview_status(interview_id: str) -> Optional[Dict]:
         return None
 
 
+def _parse_feedback_result(feedback: str) -> Optional[str]:
+    """
+    Parse feedback to determine pass/fail from Yes/No answers.
+    HackerRank feedback format: "Q. Overall, how would you rate this candidate?  \n**** (4/5) - Yes"
+    Returns: 'pass' (Yes), 'fail' (No), or None (unclear)
+    """
+    if not feedback or not isinstance(feedback, str):
+        return None
+    text = feedback.strip().lower()
+    # Prefer "Overall" rating section - answer format: "**** (4/5) - Yes" or "Yes"/"No"
+    for marker in ('overall', 'how would you rate'):
+        if marker in text:
+            # Get text after the marker (the answer block)
+            idx = text.rfind(marker)
+            after = text[idx + len(marker):]
+            # Look for - Yes or - No (common format)
+            if ' - yes' in after or ')- yes' in after:
+                return 'pass'
+            if ' - no' in after or ')- no' in after:
+                return 'fail'
+            # Or ends with yes/no
+            stripped = after.strip()
+            if stripped.endswith('yes'):
+                return 'pass'
+            if stripped.endswith('no'):
+                return 'fail'
+    # Fallback: last Yes/No in feedback (overall recommendation often last)
+    # Use word boundaries to avoid "none" matching "no", "eyes" matching "yes"
+    yes_matches = list(re.finditer(r'\byes\b', text))
+    no_matches = list(re.finditer(r'\bno\b', text))
+    if yes_matches and (not no_matches or yes_matches[-1].start() > no_matches[-1].start()):
+        return 'pass'
+    if no_matches and (not yes_matches or no_matches[-1].start() > yes_matches[-1].start()):
+        return 'fail'
+    return None
+
+
 def determine_interview_result(interview_data: Dict) -> Optional[str]:
     """Determine interview result from HackerRank data.
+    
+    HackerRank API returns status='ended' when interview is done.
+    Result is parsed from feedback (Yes/No) when thumbs_up is null.
     
     Returns: 'pass', 'fail', or None (pending)
     """
     if not interview_data:
         return None
     
-    interview_status = interview_data.get('status', 'unknown')
-    if interview_status != 'completed':
-        return None
-    
-    # thumbs_up can be: 1 (pass), 0 (fail), or None/absent (pending)
+    # thumbs_up can be: 1 (pass), 0 (fail), or None (parse from feedback)
     thumbs_up = interview_data.get('thumbs_up')
     if thumbs_up == 1 or thumbs_up is True:
         return 'pass'
     elif thumbs_up == 0 or thumbs_up is False:
         return 'fail'
-    else:
-        return None  # Pending manual review
+    
+    # When thumbs_up is null, parse feedback for Yes/No
+    feedback = interview_data.get('feedback')
+    return _parse_feedback_result(feedback)
 
 
 def poll_all_pending_interviews():
@@ -110,7 +149,8 @@ def poll_all_pending_interviews():
         logger.info("No pending interviews found")
         return
     
-    logger.info(f"Found {len(experts_with_interviews)} candidates with scheduled interviews")
+    contributor_names = [e.get('display_name') or e.get('github_username') or e.get('email') or 'unknown' for e in experts_with_interviews]
+    logger.info(f"Found {len(experts_with_interviews)} candidates with scheduled interviews: {contributor_names}")
     
     checked_count = 0
     updated_count = 0
@@ -119,14 +159,15 @@ def poll_all_pending_interviews():
     
     for expert in experts_with_interviews:
         try:
+            contributor_label = expert.get('display_name') or expert.get('github_username') or expert.get('email') or 'unknown'
             interview_id = expert.get('interview_id')
             email = expert.get('email')
             
             if not interview_id or not email:
-                logger.warning(f"Skipping expert {expert.get('github_username', 'unknown')}: missing interview_id or email")
+                logger.warning(f"Skipping {contributor_label}: missing interview_id or email")
                 continue
             
-            # Fetch status from HackerRank
+            logger.info(f"Checking interview: {contributor_label} ({email})")
             interview_data = check_interview_status(interview_id)
             
             if not interview_data:
@@ -143,8 +184,8 @@ def poll_all_pending_interviews():
             interview_status = interview_data.get('status', 'unknown')
             interview_result = determine_interview_result(interview_data)
             
-            # Only update if interview is completed
-            if interview_status == 'completed':
+            # Update when interview is ended (HackerRank uses 'ended', legacy used 'completed')
+            if interview_status in ('ended', 'completed'):
                 update_result = update_expert_interview_completion(
                     email=email,
                     interview_status=interview_status,
@@ -156,7 +197,7 @@ def poll_all_pending_interviews():
                     updated_count += 1
                     completed_count += 1
                     result_text = interview_result or 'pending review'
-                    logger.info(f"✅ Updated {email}: Interview completed - Result: {result_text}")
+                    logger.info(f"  ✅ {contributor_label}: Interview ended - Result: {result_text}")
                 else:
                     errors.append({
                         "email": email,
@@ -164,7 +205,7 @@ def poll_all_pending_interviews():
                         "error": "Failed to update MongoDB"
                     })
             else:
-                logger.debug(f"Interview {interview_id} for {email} still in status: {interview_status}")
+                logger.info(f"  {contributor_label}: Interview still in status: {interview_status}")
                 
         except Exception as e:
             logger.error(f"Error processing interview for {expert.get('email', 'unknown')}: {str(e)}", exc_info=True)
@@ -186,6 +227,8 @@ def run_poller():
     logger.info("=" * 80)
     logger.info("Starting Interview Status Poller Service")
     logger.info(f"Poll interval: {POLL_INTERVAL_MINUTES} minutes")
+    logger.info(f"Pulls candidates: status='interviewing' with interview_id")
+    logger.info(f"Updates when HackerRank status='ended', result from feedback (Yes/No)")
     logger.info(f"HackerRank API Base: {HACKERRANK_API_BASE}")
     logger.info("=" * 80)
     

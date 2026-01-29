@@ -301,8 +301,8 @@ def update_expert_interview_completion(email: str, interview_status: str, interv
         if 'interviewResult' not in existing_workflow:
             existing_workflow['interviewResult'] = 'pending'
         
-        # Update interview status based on HackerRank status
-        if interview_status == 'completed':
+        # Update interview status based on HackerRank status ('ended' or 'completed' = done)
+        if interview_status in ('ended', 'completed'):
             existing_workflow['interview'] = 'completed'
         elif interview_status in ['in_progress', 'started']:
             existing_workflow['interview'] = 'scheduled'  # Keep as scheduled if in progress

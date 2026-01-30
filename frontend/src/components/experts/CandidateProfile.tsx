@@ -455,7 +455,6 @@ export function CandidateProfile({ expert, onBack }: CandidateProfileProps) {
         </div>
       </div>
 
-
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Performance Metrics - Radar Chart */}
@@ -565,7 +564,7 @@ export function CandidateProfile({ expert, onBack }: CandidateProfileProps) {
         {username && <ContributionHeatmap username={username} />}
       </div>
 
-      {/* AI Summary */}
+      {/* AI Summary - after heatmap */}
       <div className="card-terminal p-6">
         <h3 className="text-sm font-mono uppercase text-muted-foreground mb-4 flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-primary" />

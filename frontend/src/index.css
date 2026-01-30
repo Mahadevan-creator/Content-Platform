@@ -241,7 +241,7 @@
   
   /* Card terminal style – elevation in light, flat in dark */
   .card-terminal {
-    @apply bg-surface-1 border border-border rounded-lg overflow-hidden transition-shadow duration-200;
+    @apply bg-surface-1 border border-border rounded-lg transition-shadow duration-200;
     box-shadow: var(--shadow-card);
   }
   .dark .card-terminal {

@@ -781,9 +781,9 @@ export function ExpertsTable() {
                         {workflowLabels.emailSent[expert.workflow.emailSent].label}
                       </span>
                     </td>
-                    <td className="py-3 px-3 align-middle whitespace-nowrap">
-                      <span className={`text-xs ${workflowLabels.testSent[expert.workflow.testSent].className}`}>
-                        {workflowLabels.testSent[expert.workflow.testSent].label}
+                    <td className="p-4">
+                      <span className={`text-xs font-mono ${workflowLabels.testSent[(expert.workflow?.testSent ?? 'pending') as keyof typeof workflowLabels.testSent]?.className ?? 'text-muted-foreground'}`}>
+                        {workflowLabels.testSent[(expert.workflow?.testSent ?? 'pending') as keyof typeof workflowLabels.testSent]?.label ?? '—'}
                       </span>
                     </td>
                     <td className="py-3 px-3 align-middle whitespace-nowrap">

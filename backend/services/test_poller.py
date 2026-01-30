@@ -145,7 +145,11 @@ def is_test_completed(data: Dict) -> bool:
     status = data.get('status') or data.get('state')
     if status is not None:
         if isinstance(status, str):
-            if str(status).lower() in ('completed', 'submitted', 'done', 'finished'):
+            status_lower = str(status).lower()
+            if status_lower in ('completed', 'submitted', 'done', 'finished'):
+                return True
+            # HackerRank can return 'failed' when candidate failed/did not pass
+            if status_lower == 'failed':
                 return True
         elif isinstance(status, (int, float)):
             # HackerRank uses numeric status: 7 = completed
@@ -153,6 +157,24 @@ def is_test_completed(data: Dict) -> bool:
                 return True
     # If we have score/percentage_score (even 0), consider it completed
     return extract_score(data) is not None
+
+
+def is_explicitly_failed(data: Dict) -> bool:
+    """Check if HackerRank API explicitly marks candidate as failed."""
+    if not data:
+        return False
+    status = data.get('status') or data.get('state')
+    if status is not None and isinstance(status, str):
+        if str(status).lower() == 'failed':
+            return True
+    # Check nested
+    for nested in ('model', 'result', 'data'):
+        obj = data.get(nested)
+        if isinstance(obj, dict):
+            s = obj.get('status') or obj.get('state')
+            if s is not None and str(s).lower() == 'failed':
+                return True
+    return False
 
 
 def poll_all_assessment_candidates():
@@ -219,12 +241,18 @@ def poll_all_assessment_candidates():
             score = extract_score(data)
             plagiarism = extract_plagiarism(data)
             
-            if score is None:
-                logger.warning(f"  {contributor_label}: No score in response. Raw keys: {list(data.keys())}")
-                continue
-            
-            # Pass: score >= 75 AND plagiarism is false
-            passed = score >= PASS_SCORE_THRESHOLD and not plagiarism
+            # If HackerRank explicitly marks as failed, or we have no score but test is completed -> treat as failed
+            if is_explicitly_failed(data):
+                passed = False
+                score = score if score is not None else 0.0
+            elif score is None:
+                # Completed but no score - treat as failed (e.g. abandoned, disqualified)
+                logger.info(f"  {contributor_label}: Test completed but no score - marking as failed")
+                passed = False
+                score = 0.0
+            else:
+                # Pass: score >= 75 AND plagiarism is false
+                passed = score >= PASS_SCORE_THRESHOLD and not plagiarism
             
             update_result = update_expert_assessment_completion(
                 email=email,

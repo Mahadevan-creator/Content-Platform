@@ -21,8 +21,14 @@ def _build_html_body(
     sender_name: str = "",
 ) -> str:
     html = body.replace("\n", "<br>")
+    # Insert Google form link before "Best," (so it appears where "the link below" is referenced)
     if interest_form_link:
-        html += f'<br><br><p>Interest form: <a href="{interest_form_link}">{interest_form_link}</a></p>'
+        link_block = f'<br><br><p><a href="{interest_form_link}" style="color:{HACKERRANK_GREEN};font-weight:600;text-decoration:underline">{interest_form_link}</a></p><br>'
+        best_idx = html.rfind("Best,")
+        if best_idx >= 0:
+            html = html[:best_idx] + link_block + html[best_idx:]
+        else:
+            html += link_block
     # Replace plain signature with styled block (gray name, icon, green HackerRank)
     best_idx = html.rfind("Best,")
     if best_idx >= 0:

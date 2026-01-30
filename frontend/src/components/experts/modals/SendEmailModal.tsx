@@ -68,16 +68,16 @@ export function SendEmailModal({ open, onOpenChange, candidates = [], onEmailSen
       const withEmail = (candidates || []).filter((c) => c?.email?.trim());
       setRecipients(withEmail);
       setNewEmail('');
-      // Subject: match reference email format
+      // Subject: single recipient with name → personalized; multiple → generic
       if (withEmail.length === 1 && withEmail[0].name) {
         setSubject(`${withEmail[0].name} – Opportunity to Design Real-World, Repo-Based Interview Tasks at HackerRank`);
       } else {
         setSubject('Opportunity to Design Real-World, Repo-Based Interview Tasks at HackerRank');
       }
-      // Build body with candidate name and sender name (fetched from API)
+      // Build body: single recipient with name → use name; multiple → "Candidate"
       const candidateName = withEmail.length === 1 && withEmail[0].name
         ? withEmail[0].name
-        : 'there';
+        : 'Candidate';
       getEmailConfig().then((config) => {
         const displayName = config.sender_name || 'HackerRank Team';
         setSenderName(displayName);

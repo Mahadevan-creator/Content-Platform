@@ -19,10 +19,19 @@ import {
 import { sendTestToCandidate } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
+export interface TestCandidate {
+  email: string;
+  name?: string;
+}
+
 interface SendTestModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Single candidate (from row) or multiple (from bulk) */
+  candidates?: TestCandidate[];
+  /** @deprecated Use candidates instead */
   candidateName?: string;
+  /** @deprecated Use candidates instead */
   candidateEmail?: string;
   onTestSent?: () => void;
 }
@@ -74,6 +83,7 @@ const availableTests = [
 export function SendTestModal({ 
   open, 
   onOpenChange, 
+  candidates = [],
   candidateName = '',
   candidateEmail = '',
   onTestSent
@@ -81,38 +91,62 @@ export function SendTestModal({
   const { toast } = useToast();
   const [selectedTest, setSelectedTest] = useState('');
   const [loading, setLoading] = useState(false);
-  const [successResult, setSuccessResult] = useState<{ test_link?: string } | null>(null);
+  const [successResult, setSuccessResult] = useState<{ test_link?: string; sent?: number; failed?: string[] } | null>(null);
   
+  // Support both candidates array and legacy single candidate props
+  const candidateList: TestCandidate[] = candidates.length > 0
+    ? candidates
+    : candidateEmail ? [{ email: candidateEmail, name: candidateName || undefined }] : [];
+  
+  const isBulk = candidateList.length > 1;
   const selectedTestDetails = availableTests.find(t => t.id === selectedTest);
 
   const handleSend = async () => {
-    const email = (candidateEmail ?? '').trim();
-    if (!selectedTest || !email) {
+    if (!selectedTest || candidateList.length === 0) {
       toast({
         title: 'Missing information',
-        description: 'Please select a test and ensure candidate email is provided',
+        description: 'Please select a test and ensure at least one candidate email is provided',
         variant: 'destructive',
       });
       return;
     }
 
     setLoading(true);
+    let sentCount = 0;
+    const failed: string[] = [];
     try {
-      const result = await sendTestToCandidate({
-        test_id: selectedTest,
-        candidate_email: email,
-        candidate_name: (candidateName ?? '').trim() || undefined,
-        send_email: true,
-      });
+      for (const c of candidateList) {
+        const email = (c.email ?? '').trim();
+        if (!email) continue;
+        try {
+          await sendTestToCandidate({
+            test_id: selectedTest,
+            candidate_email: email,
+            candidate_name: isBulk ? 'Candidate' : ((c.name ?? '').trim() || undefined),
+            send_email: true,
+          });
+          sentCount += 1;
+        } catch (err) {
+          failed.push(`${email}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        }
+      }
       
-      setSuccessResult(result);
-      toast({
-        title: 'Test sent successfully',
-        description: `Test invite sent to ${candidateEmail}`,
-      });
-      
-      if (onTestSent) {
-        onTestSent();
+      setSuccessResult({ sent: sentCount, failed: failed.length > 0 ? failed : undefined });
+      if (sentCount > 0) {
+        toast({
+          title: 'Test sent',
+          description: failed.length > 0
+            ? `Sent to ${sentCount} recipient(s). Failed: ${failed.length}`
+            : `Test invite sent to ${sentCount} recipient(s)`,
+        });
+        if (onTestSent) onTestSent();
+      }
+      if (failed.length > 0 && sentCount === 0) {
+        toast({
+          title: 'Failed to send test',
+          description: failed[0],
+          variant: 'destructive',
+        });
       }
     } catch (error) {
       toast({
@@ -150,7 +184,12 @@ export function SendTestModal({
               <div>
                 <p className="font-medium text-foreground">Test invite sent successfully</p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  The candidate will receive an email with the test link.
+                  {successResult.sent && successResult.sent > 1
+                    ? `${successResult.sent} candidates will receive an email with the test link.`
+                    : 'The candidate will receive an email with the test link.'}
+                  {successResult.failed && successResult.failed.length > 0 && (
+                    <span className="block mt-1 text-destructive">Failed: {successResult.failed.length}</span>
+                  )}
                 </p>
               </div>
             </div>
@@ -192,16 +231,26 @@ export function SendTestModal({
         ) : (
           <>
             <div className="space-y-4 mt-2">
-              {candidateName && candidateEmail && (
+              {candidateList.length > 0 && (
                 <div className="p-3 rounded-lg bg-surface-2 border border-border">
-                  <Label className="text-muted-foreground text-xs">Candidate</Label>
-                  <p className="font-medium text-foreground mt-0.5">{candidateName}</p>
-                  <p className="text-sm text-muted-foreground font-mono">{candidateEmail}</p>
+                  <Label className="text-muted-foreground text-xs">
+                    {candidateList.length === 1 ? 'Candidate' : `Candidates (${candidateList.length})`}
+                  </Label>
+                  {candidateList.length === 1 ? (
+                    <>
+                      <p className="font-medium text-foreground mt-0.5">{candidateList[0].name || candidateList[0].email}</p>
+                      <p className="text-sm text-muted-foreground font-mono">{candidateList[0].email}</p>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground mt-0.5 font-mono">
+                      {candidateList.map((c) => c.email).join(', ')}
+                    </p>
+                  )}
                 </div>
               )}
               
-              {!candidateEmail && (
-                <p className="text-xs text-destructive font-medium">⚠️ Candidate email is required</p>
+              {candidateList.length === 0 && (
+                <p className="text-xs text-destructive font-medium">⚠️ At least one candidate email is required</p>
               )}
               
               <div className="space-y-2">
@@ -272,11 +321,11 @@ export function SendTestModal({
               <Button variant="outline" onClick={() => handleClose(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleSend} disabled={!selectedTest || !candidateEmail || loading}>
+              <Button onClick={handleSend} disabled={!selectedTest || candidateList.length === 0 || loading}>
                 {loading ? 'Sending...' : (
                   <>
                     <FileText className="w-4 h-4 mr-2" />
-                    Send Test
+                    Send Test{candidateList.length > 1 ? ` to ${candidateList.length} candidates` : ''}
                   </>
                 )}
               </Button>

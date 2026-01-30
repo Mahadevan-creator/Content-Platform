@@ -47,7 +47,7 @@ export default function Index() {
   const ActiveComponent = sectionComponents[activeSection];
 
   return (
-    <div className="flex min-h-screen w-full bg-background">
+    <div className="flex h-screen w-full bg-background overflow-hidden">
       {/* Mobile menu overlay */}
       {isMobile && isMobileMenuOpen && (
         <div 
@@ -70,16 +70,16 @@ export default function Index() {
         />
       </div>
       
-      <main className="flex-1 overflow-auto flex flex-col">
-        {/* Desktop: top bar with theme toggle (right-aligned, always visible) */}
-        {!isMobile && (
-          <div className="app-bar sticky top-0 z-20 flex items-center justify-end h-14 px-4 md:px-6 border-b shrink-0 backdrop-blur-md bg-background/80">
-            <ThemeToggle variant="pill" className="shrink-0" />
+      <main className="flex-1 min-h-0 overflow-auto flex flex-col">
+        {/* Desktop: top bar with theme toggle (only for Builder/Job Board; Experts has it in header) */}
+        {!isMobile && activeSection !== 'experts' && (
+          <div className="app-bar sticky top-0 z-20 flex items-center justify-end h-10 px-4 md:px-6 shrink-0 backdrop-blur-md bg-background/80">
+            <ThemeToggle variant="icon" size="icon" className="shrink-0" />
           </div>
         )}
         {/* Mobile header */}
         {isMobile && (
-          <div className="sticky top-0 z-30 bg-background border-b border-border p-4 flex items-center justify-between gap-3 shrink-0">
+          <div className="sticky top-0 z-30 bg-background p-3 flex items-center justify-between gap-3 shrink-0">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setIsMobileMenuOpen(true)}
@@ -95,8 +95,8 @@ export default function Index() {
           </div>
         )}
         
-        <div className="p-4 md:p-8 flex-1">
-          <div className="max-w-7xl mx-auto h-full">
+        <div className="pt-8 px-4 pb-4 md:pt-10 md:px-8 md:pb-8 flex-1 min-h-0 flex flex-col">
+          <div className="max-w-7xl mx-auto flex-1 min-h-0 flex flex-col">
             <ActiveComponent key={activeSection} />
           </div>
         </div>

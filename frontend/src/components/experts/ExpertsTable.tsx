@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { 
   Mail, 
   FileText, 
@@ -54,9 +54,11 @@ import { InterviewResultModal } from './modals/InterviewResultModal';
 import { SendContractModal } from './modals/SendContractModal';
 import { ProvisionToolsModal } from './modals/ProvisionToolsModal';
 import { ProcessingNotification } from './modals/ProcessingNotification';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { ExpertsFilters, defaultFilters, type FilterState } from './ExpertsFilters';
 import type { ContributorAnalysis } from '@/lib/api';
 import { useExperts, type MongoDBExpert, type ExpertWithDisplay } from '@/hooks/useExperts';
+import { useToast } from '@/hooks/use-toast';
 
 type Expert = ExpertWithDisplay;
 
@@ -98,8 +100,15 @@ const statusConfig = {
 
 const ITEMS_PER_PAGE = 15;
 
+/** Interview can only be scheduled when candidate has passed the test (or completed it). */
+function canScheduleInterview(expert: Expert): boolean {
+  const testSent = expert.workflow?.testSent ?? 'pending';
+  return testSent === 'passed' || testSent === 'completed';
+}
+
 export function ExpertsTable() {
   const { experts: allExperts, loading, error, refetch } = useExperts();
+  const { toast } = useToast();
   const [selectedExperts, setSelectedExperts] = useState<Set<string>>(new Set());
   const [viewingProfile, setViewingProfile] = useState<Expert | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -117,6 +126,7 @@ export function ExpertsTable() {
   const [provisionModalOpen, setProvisionModalOpen] = useState(false);
   const [selectedExpert, setSelectedExpert] = useState<Expert | null>(null);
   const [processingJobId, setProcessingJobId] = useState<string | null>(null);
+  const tableScrollRef = useRef<HTMLDivElement>(null);
 
   // Calculate HRW score range from actual data for default filter
   const hrwScoreRange = useMemo(() => {
@@ -257,6 +267,18 @@ export function ExpertsTable() {
 
   const hasSelection = selectedExperts.size > 0;
 
+  // Helper to find expert by ID (use allExperts so selection works regardless of filters)
+  const findExpertById = useCallback((id: string) =>
+    allExperts.find((e) => String((e as any).id ?? (e as any)._id ?? e.github_username ?? '') === String(id)), [allExperts]);
+
+  // Bulk interview: disabled when 1 selected but that expert hasn't passed the test
+  const bulkInterviewFirstExpert = useMemo(() => {
+    if (selectedExperts.size !== 1) return null;
+    const firstId = Array.from(selectedExperts)[0];
+    return firstId ? findExpertById(firstId) : null;
+  }, [selectedExperts, findExpertById]);
+  const bulkInterviewDisabled = selectedExperts.size === 1 && (!bulkInterviewFirstExpert || !canScheduleInterview(bulkInterviewFirstExpert));
+
   // Action handlers for individual expert
   const handleSendEmail = (expert: Expert) => {
     setSelectedExpert(expert);
@@ -269,9 +291,24 @@ export function ExpertsTable() {
     }
     const ids = Array.from(selectedExperts);
     return ids
-      .map((id) => filteredExperts.find((e) => ((e as any).id || (e as any)._id || e.github_username) === id))
+      .map((id) => findExpertById(id))
       .filter((e): e is Expert => !!e && !!e.email)
       .map((e) => ({ email: e.email, name: e.name }));
+  };
+
+  const getTestModalCandidates = (): Array<{ email: string; name?: string }> => {
+    // Bulk: return all selected experts with email
+    if (selectedExperts.size > 1) {
+      return Array.from(selectedExperts)
+        .map((id) => findExpertById(id))
+        .filter((e): e is Expert => !!e && !!e.email)
+        .map((e) => ({ email: e.email, name: e.name }));
+    }
+    // Single: use selectedExpert
+    if (selectedExpert?.email) {
+      return [{ email: selectedExpert.email, name: selectedExpert.name }];
+    }
+    return [];
   };
 
   const handleSendTest = (expert: Expert) => {
@@ -280,6 +317,18 @@ export function ExpertsTable() {
   };
 
   const handleScheduleInterview = (expert: Expert) => {
+    if (!canScheduleInterview(expert)) {
+      const testSent = expert.workflow?.testSent ?? 'pending';
+      const reason = testSent === 'failed'
+        ? 'This candidate failed the assessment.'
+        : 'This candidate has not yet passed the assessment. Schedule an interview only after they pass.';
+      toast({
+        title: 'Cannot schedule interview',
+        description: reason,
+        variant: 'destructive',
+      });
+      return;
+    }
     setSelectedExpert(expert);
     setInterviewModalOpen(true);
   };
@@ -307,16 +356,35 @@ export function ExpertsTable() {
 
   const handleBulkTest = () => {
     const firstId = Array.from(selectedExperts)[0];
-    const firstExpert = firstId ? filteredExperts.find((e) => ((e as any).id || (e as any)._id || e.github_username) === firstId) : null;
+    const firstExpert = firstId ? findExpertById(firstId) : null;
     setSelectedExpert(firstExpert || null);
     setTestModalOpen(true);
   };
 
   const handleBulkInterview = () => {
-    // Use first selected expert so modal has candidate name/email
+    if (selectedExperts.size > 1) {
+      toast({
+        title: 'One candidate at a time',
+        description: 'Interviews can only be scheduled for one candidate at a time. Please select a single expert.',
+        variant: 'destructive',
+      });
+      return;
+    }
     const firstId = Array.from(selectedExperts)[0];
-    const firstExpert = firstId ? filteredExperts.find((e) => ((e as any).id || (e as any)._id || e.github_username) === firstId) : null;
-    setSelectedExpert(firstExpert || null);
+    const firstExpert = firstId ? findExpertById(firstId) : null;
+    if (!firstExpert || !canScheduleInterview(firstExpert)) {
+      const testSent = firstExpert?.workflow?.testSent ?? 'pending';
+      const reason = testSent === 'failed'
+        ? 'This candidate failed the assessment.'
+        : 'This candidate has not yet passed the assessment. Schedule an interview only after they pass.';
+      toast({
+        title: 'Cannot schedule interview',
+        description: reason,
+        variant: 'destructive',
+      });
+      return;
+    }
+    setSelectedExpert(firstExpert);
     setInterviewModalOpen(true);
   };
 
@@ -341,11 +409,11 @@ export function ExpertsTable() {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header with actions */}
-      <div className="flex flex-col gap-4 mb-6">
+    <div className="flex flex-col h-full min-h-0">
+      {/* Header with actions - stays fixed while table scrolls */}
+      <div className="flex flex-col gap-4 mb-4 shrink-0">
         <div className="flex flex-col gap-4">
-          {/* Top Row: Title and Add Button */}
+          {/* Top Row: Title (left), Add Experts + Theme toggle (right, same line) */}
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-2">
@@ -361,14 +429,17 @@ export function ExpertsTable() {
                 {filteredExperts.length !== allExperts.length && ` (${allExperts.length} total)`}
               </p>
             </div>
-            <Button 
-              onClick={() => setAddExpertsOpen(true)}
-              size="default"
-              className="flex items-center gap-2 shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
-            >
-              <Plus className="w-4 h-4" />
-              Add Experts
-            </Button>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button 
+                onClick={() => setAddExpertsOpen(true)}
+                size="default"
+                className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
+              >
+                <Plus className="w-4 h-4" />
+                Add Experts
+              </Button>
+              <ThemeToggle variant="icon" size="icon" className="shrink-0" />
+            </div>
           </div>
           
           {/* Bulk Actions Bar */}
@@ -404,6 +475,14 @@ export function ExpertsTable() {
                   size="sm"
                   onClick={handleBulkInterview}
                   className="flex items-center gap-2 text-xs sm:text-sm h-8"
+                  disabled={bulkInterviewDisabled}
+                  title={
+                    selectedExperts.size > 1
+                      ? 'Interviews can only be scheduled for one candidate at a time'
+                      : bulkInterviewDisabled
+                        ? 'Candidate must pass the assessment first'
+                        : undefined
+                  }
                 >
                   <Video className="w-3.5 h-3.5" />
                   <span className="hidden lg:inline">Interview</span>
@@ -559,10 +638,10 @@ export function ExpertsTable() {
         )}
       </div>
 
-        {/* Table */}
+        {/* Table - only this section scrolls */}
         {!loading && !error && (
-        <div className="card-terminal flex-1 overflow-hidden flex flex-col">
-        <div className="overflow-x-auto flex-1">
+        <div className="card-terminal flex-1 min-h-0 flex flex-col overflow-hidden">
+        <div ref={tableScrollRef} className="flex-1 min-h-0 overflow-auto overflow-x-auto">
           <table className="w-full">
             <thead className="sticky top-0 bg-surface-1 z-10">
               <tr className="border-b border-border">
@@ -740,11 +819,13 @@ export function ExpertsTable() {
                             <span>Send Test</span>
                           </DropdownMenuItem>
                           <DropdownMenuItem 
-                            className="gap-2 cursor-pointer"
+                            className={cn("gap-2", canScheduleInterview(expert) ? "cursor-pointer" : "cursor-not-allowed opacity-60")}
+                            disabled={!canScheduleInterview(expert)}
                             onClick={(e) => {
                               e.stopPropagation();
                               handleScheduleInterview(expert);
                             }}
+                            title={!canScheduleInterview(expert) ? 'Candidate must pass the assessment first' : undefined}
                           >
                             <Video className="w-4 h-4" />
                             <span>Schedule Interview</span>
@@ -793,9 +874,9 @@ export function ExpertsTable() {
           </table>
         </div>
         
-        {/* Pagination */}
+        {/* Pagination - stays fixed below scroll area */}
         {totalPages > 1 && (
-          <div className="border-t border-border px-6 py-4 bg-surface-1/50">
+          <div className="border-t border-border px-6 py-4 bg-surface-1/50 shrink-0">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-2 text-sm text-muted-foreground tabular-nums">
                 <span className="inline-flex items-center gap-1.5 rounded-md bg-muted/80 px-2.5 py-1 text-foreground font-medium">
@@ -814,7 +895,7 @@ export function ExpertsTable() {
                         e.preventDefault();
                         if (currentPage > 1) {
                           setCurrentPage(currentPage - 1);
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                          tableScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
                         }
                       }}
                       className={cn(
@@ -875,7 +956,7 @@ export function ExpertsTable() {
                             onClick={(e) => {
                               e.preventDefault();
                               setCurrentPage(page);
-                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                              tableScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
                             }}
                             isActive={currentPage === page}
                             className="cursor-pointer min-w-[2.5rem] transition-all"
@@ -894,7 +975,7 @@ export function ExpertsTable() {
                         e.preventDefault();
                         if (currentPage < totalPages) {
                           setCurrentPage(currentPage + 1);
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                          tableScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
                         }
                       }}
                       className={cn(
@@ -944,8 +1025,7 @@ export function ExpertsTable() {
       <SendTestModal 
         open={testModalOpen} 
         onOpenChange={setTestModalOpen}
-        candidateName={selectedExpert?.name ?? ''}
-        candidateEmail={selectedExpert?.email ?? ''}
+        candidates={getTestModalCandidates()}
         onTestSent={() => {
           refetch(); // Refresh experts list after test is sent
         }}

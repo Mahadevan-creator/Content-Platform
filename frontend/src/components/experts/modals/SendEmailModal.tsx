@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Mail, Link, X, Plus } from 'lucide-react';
-import { sendEmailToCandidate } from '@/lib/api';
+import { sendEmailToCandidate, getEmailConfig } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import {
   Dialog,
@@ -28,41 +28,61 @@ interface SendEmailModalProps {
   onEmailSent?: () => void;
 }
 
-const defaultEmailBody = `Hi there,
+const EMAIL_TEMPLATE = `Hi {candidateName},
 
-I hope this message finds you well! I came across your impressive work on GitHub and wanted to reach out about an exciting opportunity.
+At HackerRank, we're moving beyond LeetCode-style questions and algorithm memorization.
 
-We're building a network of exceptional developers and engineers who work on cutting-edge projects with top tech companies. Based on your expertise, I believe you'd be a perfect fit for our community.
+We want to assess real engineering skills and how candidates work in existing codebases, understand requirements, make design trade-offs, write tests, and deliver production-quality code. We're building interview and take-home tasks based on real-world repositories, where candidates contribute to production-style codebases instead of solving isolated problems.
 
-As a member, you'll get:
-✨ Access to exclusive high-paying projects
-🚀 Flexible remote work opportunities
-🤝 Collaboration with talented peers globally
-📈 Career growth and skill development
+We're looking to collaborate with experienced engineers like you to help design these repo-based tasks.
+I think your work aligns well with this direction, and we'd love to explore a collaboration. Would you be open to a short conversation?
 
-I'd love to learn more about your interests and discuss how we can work together.`;
+Please check & fill the google form by clicking the link below so that my team can reach out to you for taking things forward.
+
+Best,
+
+{senderName}
+HackerRank`;
+
+const DEFAULT_INTEREST_FORM_LINK = 'https://forms.gle/eAoqLZERuaeBtpzEA';
+
+function buildEmailBody(candidateName: string, senderName: string): string {
+  return EMAIL_TEMPLATE
+    .replace(/{candidateName}/g, candidateName)
+    .replace(/{senderName}/g, senderName);
+}
 
 export function SendEmailModal({ open, onOpenChange, candidates = [], onEmailSent }: SendEmailModalProps) {
   const [recipients, setRecipients] = useState<EmailCandidate[]>([]);
   const [newEmail, setNewEmail] = useState('');
-  const [subject, setSubject] = useState('Join Our Elite Developer Network 🚀');
-  const [body, setBody] = useState(defaultEmailBody);
-  const [interestFormLink] = useState('https://forms.example.com/join-network');
+  const [subject, setSubject] = useState('Opportunity to Design Real-World, Repo-Based Interview Tasks at HackerRank');
+  const [body, setBody] = useState('');
+  const [senderName, setSenderName] = useState('');
+  const [interestFormLink] = useState(DEFAULT_INTEREST_FORM_LINK);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
-  // Sync recipients when modal opens or candidates change
+  // Sync recipients, subject, and build body when modal opens or candidates change
   useEffect(() => {
     if (open) {
       const withEmail = (candidates || []).filter((c) => c?.email?.trim());
       setRecipients(withEmail);
       setNewEmail('');
-      // Subject: personalized for single, generic for bulk
+      // Subject: match reference email format
       if (withEmail.length === 1 && withEmail[0].name) {
-        setSubject(`${withEmail[0].name}, Join Our Elite Developer Network 🚀`);
+        setSubject(`${withEmail[0].name} – Opportunity to Design Real-World, Repo-Based Interview Tasks at HackerRank`);
       } else {
-        setSubject('Join Our Elite Developer Network 🚀');
+        setSubject('Opportunity to Design Real-World, Repo-Based Interview Tasks at HackerRank');
       }
+      // Build body with candidate name and sender name (fetched from API)
+      const candidateName = withEmail.length === 1 && withEmail[0].name
+        ? withEmail[0].name
+        : 'there';
+      getEmailConfig().then((config) => {
+        const displayName = config.sender_name || 'HackerRank Team';
+        setSenderName(displayName);
+        setBody(buildEmailBody(candidateName, displayName));
+      });
     }
   }, [open, candidates]);
 

@@ -84,7 +84,12 @@ export function useExperts() {
     try {
       setLoading(true);
       const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
-      const response = await fetch(`${API_BASE_URL}/api/experts`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+      const response = await fetch(`${API_BASE_URL}/api/experts`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error(`Failed to fetch experts: ${response.statusText}`);
@@ -122,7 +127,11 @@ export function useExperts() {
       setExperts(transformedExperts);
       setError(null);
     } catch (err) {
-      setError(err as Error);
+      const error = err as Error;
+      const message = error.name === 'AbortError'
+        ? 'Request timed out. Is the backend running on port 8001? Run: cd backend && python3 main.py'
+        : error.message;
+      setError(new Error(message));
       console.error('Error fetching experts:', err);
     } finally {
       setLoading(false);

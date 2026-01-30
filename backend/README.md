@@ -81,7 +81,7 @@ Status values: `pending`, `processing`, `completed`, `failed`
 ## Environment Variables
 
 - `GITHUB_TOKEN`: GitHub personal access token (optional but **highly recommended**)
-- **Send Email**: Use Brevo (no app password) or SMTP - see below
+- **Send Email**: SMTP - see below
 
 ### Setting up GitHub Token
 
@@ -110,24 +110,28 @@ GITHUB_TOKEN=your_token_here
 
 Then install python-dotenv and load it in main.py (already included in requirements.txt)
 
-### Setting up Send Email (free)
+### Setting up Send Email (SMTP)
 
-**Option A - Brevo (recommended, no app password needed)**
+Add to `.env`:
 
-300 free emails/day forever. Works with any account - no Gmail App Password required.
-
-1. Sign up at https://www.brevo.com (free)
-2. Go to **SMTP & API** → **API Keys** → Create
-3. Add to `.env`:
+**Microsoft 365 (@hackerrank.com):**
 ```
-BREVO_API_KEY=your-brevo-api-key
-BREVO_FROM_EMAIL=your@email.com
+SMTP_HOST=smtp.office365.com
+SMTP_PORT=587
+SMTP_USER=your.name@hackerrank.com
+SMTP_PASSWORD=your_password_or_app_password
+SMTP_FROM_NAME=Your Name
+SMTP_FROM_TITLE=Technical Product Manager II
 ```
 
-**Option B - SMTP (Gmail, Outlook, etc.)**
+`SMTP_FROM_NAME` (optional) – display name in signatures (e.g. "Dhruvi Shah"). If unset, derived from SMTP_USER.
+`SMTP_FROM_TITLE` (optional) – job title in signatures (e.g. "Technical Product Manager II").
 
-Gmail requires an App Password (not available for Workspace/school accounts). If you have a personal Gmail with 2FA, create one at myaccount.google.com/apppasswords
+If MFA is enabled, create an **App Password** at https://mysignins.microsoft.com/security-info → Add sign-in method → App password.
 
+> **Note:** Some orgs disable SMTP AUTH. If you get "SmtpClientAuthentication is disabled for the Tenant", contact IT or use a transactional provider (SendGrid, Mailgun, etc.).
+
+**Gmail (personal):**
 ```
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
@@ -135,12 +139,12 @@ SMTP_USER=your@gmail.com
 SMTP_PASSWORD=your_app_password
 ```
 
-**Troubleshooting (email not received):**
+Use an App Password from myaccount.google.com/apppasswords (requires 2FA).
 
-1. **Verify sender in Brevo** – Go to Brevo dashboard → Senders & IPs → Add sender → Add your sender email → Verify with 6-digit code sent to that email.
+**Troubleshooting:**
+1. **Test config** – `GET http://localhost:8001/api/email/test` to verify env vars.
 2. **Check spam folder** – Emails often land in spam until sender reputation builds.
-3. **Test config** – `GET http://localhost:8001/api/email/test` to verify env vars are loaded.
-4. **Check backend logs** – Look for `📧 Sending email via Brevo` and `✅ Brevo accepted` or `❌ Brevo error`.
+3. **Check backend logs** – Failure details are printed when send fails.
 
 **Option 3: Set in your shell profile**
 ```bash

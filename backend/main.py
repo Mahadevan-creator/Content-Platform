@@ -23,7 +23,7 @@ if _frontend_env.exists():
     load_dotenv(_frontend_env)
 
 from services.github_service import analyze_repository_contributors, get_github_token
-from services.mongodb_service import get_expert, get_expert_by_email, get_mongodb_collection, update_expert_interview, update_expert_interview_completion
+from services.mongodb_service import get_expert, get_expert_by_email, get_mongodb_collection, update_expert_interview, update_expert_interview_completion, update_expert_email_sent
 from services.interview_poller import determine_interview_result
 import logging
 
@@ -48,7 +48,7 @@ async def startup_event():
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8080", "http://localhost:5173", "http://127.0.0.1:8080", "http://localhost:8000"],
+    allow_origins=["http://localhost:8080", "http://localhost:5173", "http://127.0.0.1:8080", "http://127.0.0.1:5173", "http://localhost:8000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -562,11 +562,7 @@ async def send_test_to_candidate(request: SendTestRequest):
 
 @app.post("/api/email/send")
 async def send_email_endpoint(request: SendEmailRequest):
-    """Send email(s). Supports bulk.
-    
-    Option A - Brevo (easiest, no app password): BREVO_API_KEY + BREVO_FROM_EMAIL
-    Option B - SMTP: SMTP_HOST, SMTP_USER, SMTP_PASSWORD
-    """
+    """Send email(s). Supports bulk. Requires SMTP_HOST, SMTP_USER, SMTP_PASSWORD."""
     from services.email_service import send_email
     
     to_list = [e.strip() for e in request.to if e and isinstance(e, str) and "@" in str(e)]
@@ -579,10 +575,17 @@ async def send_email_endpoint(request: SendEmailRequest):
             subject=request.subject,
             body=request.body,
             interest_form_link=request.interest_form_link,
+            sender_name=_get_sender_name(),
         )
         msg = f"Sent to {result['sent']} recipient(s)"
         if result.get("failed"):
             msg += f". Failed: {len(result['failed'])}"
+            for f in result["failed"]:
+                print(f"❌ Email failure: {f}")
+        # Mark experts as email sent for successfully delivered emails
+        sent_emails = result.get("sent_emails", [])
+        if sent_emails:
+            update_expert_email_sent(sent_emails)
         print(f"✅ {msg}")
         return {
             "success": result["success"],
@@ -597,24 +600,43 @@ async def send_email_endpoint(request: SendEmailRequest):
         raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
 
 
+def _get_sender_name() -> str:
+    """Derive sender display name from SMTP_USER (e.g. dhruvi.shah@hackerrank.com -> Dhruvi Shah)."""
+    from_name = os.getenv("SMTP_FROM_NAME")
+    if from_name:
+        return from_name
+    user = os.getenv("SMTP_USER") or ""
+    if "@" in user:
+        local = user.split("@")[0]
+        # dhruvi.shah -> Dhruvi Shah
+        parts = local.replace(".", " ").replace("_", " ").split()
+        return " ".join(p.capitalize() for p in parts) if parts else local
+    return user or ""
+
+
+def _get_sender_title() -> str:
+    """Get sender job title from SMTP_FROM_TITLE (e.g. Technical Product Manager II)."""
+    return os.getenv("SMTP_FROM_TITLE", "").strip()
+
+
 @app.get("/api/email/test")
 async def test_email_config():
-    """Check if email (Brevo/SMTP) is configured. Does NOT send an email."""
-    brevo_key = os.getenv("BREVO_API_KEY")
-    from_email = os.getenv("BREVO_FROM_EMAIL") or os.getenv("SMTP_USER")
+    """Check if SMTP is configured. Does NOT send an email."""
     smtp_host = os.getenv("SMTP_HOST")
-    status = []
-    if brevo_key:
-        status.append("Brevo: API key set")
-    else:
-        status.append("Brevo: BREVO_API_KEY not set")
-    if from_email:
-        status.append(f"Sender: {from_email}")
-    else:
-        status.append("Sender: BREVO_FROM_EMAIL or SMTP_USER not set")
-    if smtp_host and not brevo_key:
-        status.append(f"SMTP: {smtp_host}")
-    return {"configured": bool(brevo_key or smtp_host), "details": status}
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_pwd = os.getenv("SMTP_PASSWORD")
+    smtp_ok = all([smtp_host, smtp_user, smtp_pwd])
+    status = [
+        f"SMTP host: {smtp_host or '(not set)'}",
+        f"Sender: {smtp_user or '(not set)'}",
+    ]
+    return {
+        "configured": smtp_ok,
+        "provider": "smtp",
+        "sender_name": _get_sender_name(),
+        "sender_title": _get_sender_title(),
+        "details": status,
+    }
 
 
 class HackerRankWebhookPayload(BaseModel):

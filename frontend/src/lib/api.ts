@@ -239,6 +239,22 @@ export interface SendTestResponse {
   email?: string;
 }
 
+export interface EmailConfig {
+  configured: boolean;
+  sender_name: string;
+  sender_title: string;
+}
+
+export async function getEmailConfig(): Promise<EmailConfig> {
+  const response = await fetch(`${API_BASE_URL}/api/email/test`);
+  const data = await response.json();
+  return {
+    configured: data.configured ?? false,
+    sender_name: data.sender_name ?? '',
+    sender_title: data.sender_title ?? '',
+  };
+}
+
 export interface SendEmailPayload {
   to: string[];  // List of recipient emails (supports bulk)
   subject: string;

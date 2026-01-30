@@ -448,7 +448,7 @@
 Service to interact with MongoDB Atlas database.
 """
 import os
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 from pymongo import MongoClient
 from pymongo.collection import Collection
 from pymongo.database import Database
@@ -658,6 +658,39 @@ def get_expert_by_email(email: str) -> Optional[Dict]:
     except Exception as e:
         print(f"❌ Error fetching expert by email {email} from MongoDB: {e}")
         return None
+
+
+def update_expert_email_sent(emails: List[str]) -> int:
+    """
+    Mark workflow.emailSent as 'sent' for experts with the given emails.
+    Returns the number of experts updated.
+    """
+    collection = get_mongodb_collection()
+    if collection is None:
+        return 0
+    try:
+        from datetime import datetime
+        updated = 0
+        for email in emails:
+            if not email or "@" not in str(email):
+                continue
+            result = collection.update_one(
+                {"email": email},
+                {
+                    "$set": {
+                        "workflow.emailSent": "sent",
+                        "updated_at": datetime.utcnow().isoformat(),
+                    }
+                },
+            )
+            if result.modified_count:
+                updated += 1
+        if updated:
+            print(f"✅ Marked emailSent=sent for {updated} expert(s)")
+        return updated
+    except Exception as e:
+        print(f"❌ Error updating emailSent for experts: {e}")
+        return 0
 
 
 def update_expert_interview(email: str, interview_report_url: str, interview_url: str = None) -> Optional[Dict]:

@@ -921,6 +921,9 @@ def update_expert_assessment_completion(
         
         # Update testSent: 'sent' -> 'passed' or 'failed' based on assessment result
         existing_workflow['testSent'] = assessment_result  # 'passed' or 'failed'
+        # When test fails, also set interviewResult to 'fail' so Result column shows Failed (not —)
+        if assessment_result == 'failed':
+            existing_workflow['interviewResult'] = 'fail'
         
         update_data = {
             'updated_at': current_time,

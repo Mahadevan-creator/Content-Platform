@@ -220,7 +220,18 @@ def poll_all_assessment_candidates():
             # Skip if already passed/failed (workflow.testSent)
             workflow = expert.get('workflow', {}) or {}
             test_sent = workflow.get('testSent', '')
+            interview_result = workflow.get('interviewResult', 'pending')
             if test_sent in ('passed', 'failed'):
+                # Backfill: if test failed but Result still shows "—", set interviewResult to 'fail'
+                if test_sent == 'failed' and interview_result == 'pending':
+                    update_expert_assessment_completion(
+                        email=email,
+                        assessment_result='failed',
+                        hrw_score=expert.get('hrw_score') or expert.get('hrwScore') or 0.0,
+                        test_id=test_id or None,
+                        test_candidate_id=test_candidate_id or None
+                    )
+                    logger.info(f"  {contributor_label}: Backfilled Result to Failed (test was already failed)")
                 logger.debug(f"Skipping {contributor_label} ({email}): already {test_sent}")
                 continue
             

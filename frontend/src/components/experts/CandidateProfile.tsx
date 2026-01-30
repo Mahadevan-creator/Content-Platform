@@ -10,7 +10,7 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from 'recharts';
-import { getGitGrade, getGradeColor, getGradeBgColor } from '@/lib/gitScore';
+import { getGitGrade, getGradePillClass, getGradeTextClass } from '@/lib/gitScore';
 import ContributionHeatmap from './ContributionHeatmap';
 
 interface CandidateProfileProps {
@@ -334,8 +334,8 @@ export function CandidateProfile({ expert, onBack }: CandidateProfileProps) {
             <span className="text-sm text-muted-foreground font-mono uppercase">Git Grade</span>
           </div>
           <div className="flex items-baseline gap-3">
-            <span className={`text-5xl font-bold ${getGradeColor(gitGrade)}`}>{gitGrade}</span>
-            <span className={`px-2 py-1 rounded text-xs font-mono ${getGradeBgColor(gitGrade)} ${getGradeColor(gitGrade)}`}>
+            <span className={`text-5xl font-bold ${getGradeTextClass(gitGrade)}`}>{gitGrade}</span>
+            <span className={getGradePillClass(gitGrade) + ' text-xs'}>
               {gitScore}/100
             </span>
           </div>
@@ -343,7 +343,7 @@ export function CandidateProfile({ expert, onBack }: CandidateProfileProps) {
 
         <div className="card-terminal p-6">
           <div className="flex items-center gap-3 mb-2">
-            <Award className="w-5 h-5 text-terminal-amber" />
+            <Award className="w-5 h-5 text-warning" />
             <span className="text-sm text-muted-foreground font-mono uppercase">HRW Score</span>
           </div>
           <div className="flex items-baseline gap-2">
@@ -352,12 +352,12 @@ export function CandidateProfile({ expert, onBack }: CandidateProfileProps) {
                 href={hrwTestReportUrl!}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-4xl font-bold text-terminal-amber hover:text-terminal-amber/80 hover:underline transition-colors"
+                className="text-4xl font-bold text-warning hover:opacity-80 hover:underline transition-colors"
               >
                 {hrwScore}
               </a>
             ) : (
-              <span className="text-4xl font-bold text-terminal-amber">{hrwScore}</span>
+              <span className="text-4xl font-bold text-warning">{hrwScore}</span>
             )}
             <span className="text-muted-foreground">/ 100</span>
           </div>
@@ -368,11 +368,11 @@ export function CandidateProfile({ expert, onBack }: CandidateProfileProps) {
                 href={hrwTestReportUrl!}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-terminal-amber/10 rounded border border-terminal-amber/20 hover:bg-terminal-amber/20 transition-colors group"
+              className="hrw-report-link group"
             >
-              <FileText className="w-3.5 h-3.5 text-terminal-amber" />
-              <span className="text-xs font-medium text-terminal-amber">View Test Report</span>
-              <ExternalLink className="w-3 h-3 text-terminal-amber/60 group-hover:text-terminal-amber transition-colors" />
+              <FileText className="w-3.5 h-3.5 icon" />
+              <span className="text-xs font-medium label">View Test Report</span>
+              <ExternalLink className="w-3 h-3 external transition-colors" />
             </a>
             )}
             {hasRealInterviewReport && (
@@ -380,11 +380,11 @@ export function CandidateProfile({ expert, onBack }: CandidateProfileProps) {
                 href={interviewReportUrl!}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-terminal-cyan/10 rounded border border-terminal-cyan/20 hover:bg-terminal-cyan/20 transition-colors group"
+                className="interview-report-link group"
               >
-                <ClipboardCheck className="w-3.5 h-3.5 text-terminal-cyan" />
-                <span className="text-xs font-medium text-terminal-cyan">Interview Report</span>
-                <ExternalLink className="w-3 h-3 text-terminal-cyan/60 group-hover:text-terminal-cyan transition-colors" />
+                <ClipboardCheck className="w-3.5 h-3.5 icon" />
+                <span className="text-xs font-medium label">Interview Report</span>
+                <ExternalLink className="w-3 h-3 external transition-colors" />
               </a>
             )}
           </div>
@@ -575,16 +575,16 @@ export function CandidateProfile({ expert, onBack }: CandidateProfileProps) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           {/* Strengths */}
           <div className="space-y-3">
-            <h4 className="text-sm font-medium text-terminal-green flex items-center gap-2">
+            <h4 className="text-sm font-medium text-success flex items-center gap-2">
               <TrendingUp className="w-4 h-4" />
               Strengths
             </h4>
             {strengths.length > 0 ? (
               strengths.map((item) => (
-                <div key={item.metric} className="p-3 bg-terminal-green/10 rounded-lg border border-terminal-green/20">
+                <div key={item.metric} className="strength-card">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm font-mono text-foreground">{item.metric}</span>
-                    <span className="text-sm font-bold text-terminal-green">{item.score}/100</span>
+                    <span className="text-sm font-bold score">{item.score}/100</span>
                   </div>
                   <p className="text-xs text-muted-foreground">{item.insight}</p>
                 </div>
@@ -596,16 +596,16 @@ export function CandidateProfile({ expert, onBack }: CandidateProfileProps) {
           
           {/* Areas for Improvement */}
           <div className="space-y-3">
-            <h4 className="text-sm font-medium text-terminal-amber flex items-center gap-2">
+            <h4 className="text-sm font-medium text-warning flex items-center gap-2">
               <Activity className="w-4 h-4" />
               Areas for Improvement
             </h4>
             {weaknesses.length > 0 ? (
               weaknesses.map((item) => (
-                <div key={item.metric} className="p-3 bg-terminal-amber/10 rounded-lg border border-terminal-amber/20">
+                <div key={item.metric} className="weakness-card">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm font-mono text-foreground">{item.metric}</span>
-                    <span className="text-sm font-bold text-terminal-amber">{item.score}/100</span>
+                    <span className="text-sm font-bold score">{item.score}/100</span>
                   </div>
                   <p className="text-xs text-muted-foreground">{item.insight}</p>
                 </div>

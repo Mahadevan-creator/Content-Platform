@@ -86,7 +86,8 @@ export function SendTestModal({
   const selectedTestDetails = availableTests.find(t => t.id === selectedTest);
 
   const handleSend = async () => {
-    if (!selectedTest || !candidateEmail) {
+    const email = (candidateEmail ?? '').trim();
+    if (!selectedTest || !email) {
       toast({
         title: 'Missing information',
         description: 'Please select a test and ensure candidate email is provided',
@@ -99,8 +100,8 @@ export function SendTestModal({
     try {
       const result = await sendTestToCandidate({
         test_id: selectedTest,
-        candidate_email: candidateEmail,
-        candidate_name: candidateName || undefined,
+        candidate_email: email,
+        candidate_name: (candidateName ?? '').trim() || undefined,
         send_email: true,
       });
       
@@ -231,9 +232,9 @@ export function SendTestModal({
                     </span>
                     <span className="text-muted-foreground">
                       Difficulty: <span className={`font-mono ${
-                        selectedTestDetails.difficulty === 'Hard' ? 'text-terminal-red' :
-                        selectedTestDetails.difficulty === 'Medium' ? 'text-terminal-amber' :
-                        'text-terminal-green'
+                        selectedTestDetails.difficulty === 'Hard' ? 'text-danger' :
+                        selectedTestDetails.difficulty === 'Medium' ? 'text-warning' :
+                        'text-success'
                       }`}>{selectedTestDetails.difficulty}</span>
                     </span>
                   </div>

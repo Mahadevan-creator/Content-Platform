@@ -16,7 +16,7 @@ import {
   CheckCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getGitGrade, getGradeColor, getGradeBgColor } from '@/lib/gitScore';
+import { getGitGrade, getGradePillClass } from '@/lib/gitScore';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -63,26 +63,26 @@ type Expert = ExpertWithDisplay;
 const workflowLabels = {
   emailSent: {
     pending: { label: 'Not Sent', className: 'text-muted-foreground' },
-    sent: { label: 'Sent', className: 'text-terminal-amber' },
-    opened: { label: 'Opened', className: 'text-terminal-green' },
+    sent: { label: 'Sent', className: 'text-warning' },
+    opened: { label: 'Opened', className: 'text-success' },
   },
   testSent: {
     pending: { label: 'Not Sent', className: 'text-muted-foreground' },
-    sent: { label: 'Sent', className: 'text-terminal-amber' },
-    completed: { label: 'Completed', className: 'text-terminal-blue' },
-    passed: { label: 'Passed', className: 'text-terminal-green' },
-    failed: { label: 'Failed', className: 'text-terminal-red' },
+    sent: { label: 'Sent', className: 'text-warning' },
+    completed: { label: 'Completed', className: 'text-info' },
+    passed: { label: 'Passed', className: 'text-success' },
+    failed: { label: 'Failed', className: 'text-danger' },
   },
   interview: {
     pending: { label: 'Not Set', className: 'text-muted-foreground' },
-    scheduled: { label: 'Scheduled', className: 'text-terminal-amber' },
-    completed: { label: 'Completed', className: 'text-terminal-green' },
+    scheduled: { label: 'Scheduled', className: 'text-warning' },
+    completed: { label: 'Completed', className: 'text-success' },
   },
   interviewResult: {
     pending: { label: '—', className: 'text-muted-foreground' },
-    pass: { label: 'Pass', className: 'text-terminal-green' },
-    fail: { label: 'Fail', className: 'text-terminal-red' },
-    strong_pass: { label: 'Strong Pass', className: 'text-terminal-green font-bold' },
+    pass: { label: 'Pass', className: 'text-success' },
+    fail: { label: 'Fail', className: 'text-danger' },
+    strong_pass: { label: 'Strong Pass', className: 'text-success font-bold' },
   },
 };
 
@@ -306,7 +306,9 @@ export function ExpertsTable() {
   };
 
   const handleBulkTest = () => {
-    setSelectedExpert(null);
+    const firstId = Array.from(selectedExperts)[0];
+    const firstExpert = firstId ? filteredExperts.find((e) => ((e as any).id || (e as any)._id || e.github_username) === firstId) : null;
+    setSelectedExpert(firstExpert || null);
     setTestModalOpen(true);
   };
 
@@ -451,7 +453,7 @@ export function ExpertsTable() {
         {/* Error State */}
         {error && (
           <div className="flex items-center justify-center p-8">
-            <p className="text-terminal-red">Error loading experts: {error.message}</p>
+            <p className="text-danger">Error loading experts: {error.message}</p>
           </div>
         )}
 
@@ -659,11 +661,7 @@ export function ExpertsTable() {
                       </div>
                     </td>
                     <td className="p-4">
-                      <span className={cn(
-                        "px-2 py-1 rounded text-sm font-bold font-mono",
-                        getGradeBgColor(gitGrade),
-                        getGradeColor(gitGrade)
-                      )}>
+                      <span className={getGradePillClass(gitGrade)}>
                         {gitGrade}
                       </span>
                     </td>
@@ -693,7 +691,7 @@ export function ExpertsTable() {
                     <td className="p-4">
                       <div className="flex flex-wrap gap-1">
                         {expert.skills.slice(0, 2).map((skill) => (
-                          <span key={skill} className="px-2 py-0.5 text-xs bg-surface-2 text-muted-foreground rounded font-mono">
+                          <span key={skill} className="skill-tag">
                             {skill}
                           </span>
                         ))}
@@ -946,8 +944,8 @@ export function ExpertsTable() {
       <SendTestModal 
         open={testModalOpen} 
         onOpenChange={setTestModalOpen}
-        candidateName={selectedExpert?.name}
-        candidateEmail={selectedExpert?.email}
+        candidateName={selectedExpert?.name ?? ''}
+        candidateEmail={selectedExpert?.email ?? ''}
         onTestSent={() => {
           refetch(); // Refresh experts list after test is sent
         }}

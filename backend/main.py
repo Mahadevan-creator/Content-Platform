@@ -415,6 +415,11 @@ async def send_test_to_candidate(request: SendTestRequest):
     3. Updates workflow status
     """
     import requests as req
+    if not (request.candidate_email and request.candidate_email.strip()):
+        raise HTTPException(
+            status_code=400,
+            detail="candidate_email is required and cannot be empty",
+        )
     api_key = os.getenv("HACKERRANK_API_KEY")
     base_url = (os.getenv("HACKERRANK_API_BASE") or "https://www.hackerrank.com").rstrip("/")
     

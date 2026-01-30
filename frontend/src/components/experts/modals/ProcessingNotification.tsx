@@ -60,8 +60,8 @@ export function ProcessingNotification({ jobId, onComplete, onDismiss }: Process
           <div className="flex-1 space-y-2">
             <div className="flex items-center gap-2">
               {isProcessing && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
-              {isCompleted && <CheckCircle2 className="w-4 h-4 text-terminal-green" />}
-              {isFailed && <AlertCircle className="w-4 h-4 text-terminal-red" />}
+              {isCompleted && <CheckCircle2 className="w-4 h-4 text-success" />}
+              {isFailed && <AlertCircle className="w-4 h-4 text-danger" />}
               <span className="text-sm font-medium text-foreground">
                 {isProcessing && 'Adding experts...'}
                 {isCompleted && 'Complete'}
@@ -91,7 +91,7 @@ export function ProcessingNotification({ jobId, onComplete, onDismiss }: Process
             )}
 
             {isFailed && status.error && (
-              <p className="text-xs text-terminal-red">
+              <p className="text-xs text-danger">
                 {status.error}
               </p>
             )}

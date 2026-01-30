@@ -29,3 +29,19 @@ export function getGradeBgColor(grade: string): string {
   if (grade.startsWith('D')) return 'bg-terminal-amber/20';
   return 'bg-terminal-red/20';
 }
+
+/** Theme-aware grade pill class (use with grade-pill). A+ → a, B+ → b, etc. */
+export function getGradePillClass(grade: string): string {
+  const normalized = grade.replace('+', '').toLowerCase();
+  const key = normalized === 'f' ? 'f' : normalized;
+  return `grade-pill grade-pill-${key}`;
+}
+
+/** Theme-aware text color class for large grade display (e.g. "A+") */
+export function getGradeTextClass(grade: string): string {
+  if (grade.startsWith('A')) return 'text-grade-a';
+  if (grade.startsWith('B')) return 'text-grade-b';
+  if (grade.startsWith('C')) return 'text-grade-c';
+  if (grade.startsWith('D')) return 'text-grade-d';
+  return 'text-grade-f';
+}

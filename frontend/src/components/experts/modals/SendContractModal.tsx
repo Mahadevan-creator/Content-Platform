@@ -71,7 +71,7 @@ export function SendContractModal({ open, onOpenChange, candidateName = '', cand
               />
               <div className="flex-1">
                 <div className="flex items-center gap-2">
-                  <Shield className="w-4 h-4 text-terminal-amber" />
+                  <Shield className="w-4 h-4 text-warning" />
                   <span className="font-medium text-foreground">Non-Disclosure Agreement (NDA)</span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
@@ -93,7 +93,7 @@ export function SendContractModal({ open, onOpenChange, candidateName = '', cand
               />
               <div className="flex-1">
                 <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-terminal-green" />
+                  <FileText className="w-4 h-4 text-success" />
                   <span className="font-medium text-foreground">Contractor Agreement</span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
@@ -104,7 +104,7 @@ export function SendContractModal({ open, onOpenChange, candidateName = '', cand
           </div>
           
           {(!includeNda && !includeContract) && (
-            <p className="text-sm text-terminal-red">
+            <p className="text-sm text-danger">
               Please select at least one document to send
             </p>
           )}

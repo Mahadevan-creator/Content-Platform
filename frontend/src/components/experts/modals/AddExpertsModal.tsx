@@ -316,7 +316,7 @@ export function AddExpertsModal({ open, onOpenChange, onContributorsAnalyzed, on
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6 text-muted-foreground hover:text-terminal-red"
+                        className="h-6 w-6 text-muted-foreground hover:text-danger"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleRemoveFile();
@@ -344,7 +344,7 @@ export function AddExpertsModal({ open, onOpenChange, onContributorsAnalyzed, on
             </div>
             
             {error && (
-              <Alert variant="destructive" className="bg-terminal-red/10 border-terminal-red/20">
+              <Alert variant="destructive" className="alert-danger">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription className="text-sm">{error}</AlertDescription>
               </Alert>
@@ -385,7 +385,7 @@ export function AddExpertsModal({ open, onOpenChange, onContributorsAnalyzed, on
               </p>
             </div>
             {error && (
-              <Alert variant="destructive" className="bg-terminal-red/10 border-terminal-red/20">
+              <Alert variant="destructive" className="alert-danger">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription className="text-sm">{error}</AlertDescription>
               </Alert>
@@ -446,7 +446,7 @@ export function AddExpertsModal({ open, onOpenChange, onContributorsAnalyzed, on
                         variant="ghost"
                         size="icon"
                         onClick={() => handleRemoveRepo(index)}
-                        className="h-9 w-9 text-muted-foreground hover:text-terminal-red hover:bg-terminal-red/10"
+                        className="h-9 w-9 text-muted-foreground hover:text-danger btn-ghost-danger"
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -456,7 +456,7 @@ export function AddExpertsModal({ open, onOpenChange, onContributorsAnalyzed, on
               </div>
               
               {error && (
-                <Alert variant="destructive" className="bg-terminal-red/10 border-terminal-red/20">
+                <Alert variant="destructive" className="alert-danger">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription className="text-sm">{error}</AlertDescription>
                 </Alert>

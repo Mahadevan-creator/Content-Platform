@@ -154,19 +154,19 @@ export function InterviewResultModal({
               <SelectContent className="bg-surface-1 border-border">
                 <SelectItem value="pass" className="cursor-pointer">
                   <div className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-terminal-green" />
+                    <CheckCircle className="w-4 h-4 text-success" />
                     <span>Pass</span>
                   </div>
                 </SelectItem>
                 <SelectItem value="strong_pass" className="cursor-pointer">
                   <div className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-terminal-green" />
+                    <CheckCircle className="w-4 h-4 text-success" />
                     <span>Strong Pass</span>
                   </div>
                 </SelectItem>
                 <SelectItem value="fail" className="cursor-pointer">
                   <div className="flex items-center gap-2">
-                    <XCircle className="w-4 h-4 text-terminal-red" />
+                    <XCircle className="w-4 h-4 text-danger" />
                     <span>Fail</span>
                   </div>
                 </SelectItem>

@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { Menu } from 'lucide-react';
 import { AppSidebar } from '@/components/layout/AppSidebar';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { ExpertsTable } from '@/components/experts/ExpertsTable';
 import { IdeaGeneration } from '@/components/ideas/IdeaGeneration';
 import { JobBoardSection } from '@/components/sections/JobBoardSection';
@@ -69,23 +70,32 @@ export default function Index() {
         />
       </div>
       
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto flex flex-col">
+        {/* Desktop: top bar with theme toggle (right-aligned, always visible) */}
+        {!isMobile && (
+          <div className="app-bar sticky top-0 z-20 flex items-center justify-end h-14 px-4 md:px-6 border-b shrink-0 backdrop-blur-md bg-background/80">
+            <ThemeToggle variant="pill" className="shrink-0" />
+          </div>
+        )}
         {/* Mobile header */}
         {isMobile && (
-          <div className="sticky top-0 z-30 bg-background border-b border-border p-4 flex items-center gap-3">
-            <button
-              onClick={() => setIsMobileMenuOpen(true)}
-              className="p-2 rounded-lg bg-surface-2 hover:bg-surface-3 transition-colors"
-            >
-              <Menu className="w-5 h-5 text-foreground" />
-            </button>
-            <h1 className="font-mono font-semibold text-foreground">
-              {activeSection === 'experts' ? 'Experts' : activeSection === 'builder' ? 'Builder' : 'Job Board'}
-            </h1>
+          <div className="sticky top-0 z-30 bg-background border-b border-border p-4 flex items-center justify-between gap-3 shrink-0">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setIsMobileMenuOpen(true)}
+                className="p-2 rounded-lg bg-surface-2 hover:bg-surface-3 transition-colors"
+              >
+                <Menu className="w-5 h-5 text-foreground" />
+              </button>
+              <h1 className="font-mono font-semibold text-foreground">
+                {activeSection === 'experts' ? 'Experts' : activeSection === 'builder' ? 'Builder' : 'Job Board'}
+              </h1>
+            </div>
+            <ThemeToggle variant="icon" size="icon" />
           </div>
         )}
         
-        <div className="p-4 md:p-8">
+        <div className="p-4 md:p-8 flex-1">
           <div className="max-w-7xl mx-auto h-full">
             <ActiveComponent key={activeSection} />
           </div>

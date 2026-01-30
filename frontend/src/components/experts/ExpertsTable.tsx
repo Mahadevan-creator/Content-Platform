@@ -13,7 +13,8 @@ import {
   Search,
   Filter,
   X,
-  CheckCircle
+  CheckCircle,
+  Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getGitGrade, getGradePillClass } from '@/lib/gitScore';
@@ -55,6 +56,7 @@ import { SendContractModal } from './modals/SendContractModal';
 import { ProvisionToolsModal } from './modals/ProvisionToolsModal';
 import { ProcessingNotification } from './modals/ProcessingNotification';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ExpertsFilters, defaultFilters, type FilterState } from './ExpertsFilters';
 import type { ContributorAnalysis } from '@/lib/api';
 import { useExperts, type MongoDBExpert, type ExpertWithDisplay } from '@/hooks/useExperts';
@@ -408,8 +410,36 @@ export function ExpertsTable() {
     );
   }
 
+  // Loading: show only the loader, nothing else
+  if (loading) {
+    return (
+      <div className="flex flex-col h-full min-h-0 flex-1 items-center justify-center gap-4">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" aria-hidden />
+        <p className="text-base font-medium text-foreground">Loading experts</p>
+        <p className="text-xs text-muted-foreground font-mono">Fetching your talent pool...</p>
+        <div className="flex gap-2 mt-2">
+          <Skeleton className="h-3 w-16 rounded-full" />
+          <Skeleton className="h-3 w-20 rounded-full" />
+          <Skeleton className="h-3 w-14 rounded-full" />
+        </div>
+      </div>
+    );
+  }
+
+  // Error: show only error message
+  if (error) {
+    return (
+      <div className="flex flex-col h-full min-h-0 flex-1 items-center justify-center p-8">
+        <div className="text-center">
+          <p className="text-danger font-medium">Error loading experts</p>
+          <p className="text-sm text-muted-foreground mt-1">{error.message}</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div className="flex flex-col h-full min-h-0 w-full">
       {/* Header with actions - stays fixed while table scrolls */}
       <div className="flex flex-col gap-4 mb-4 shrink-0">
         <div className="flex flex-col gap-4">
@@ -522,22 +552,7 @@ export function ExpertsTable() {
           )}
         </div>
 
-        {/* Loading State */}
-        {loading && (
-          <div className="flex items-center justify-center p-8">
-            <p className="text-muted-foreground">Loading experts...</p>
-          </div>
-        )}
-
-        {/* Error State */}
-        {error && (
-          <div className="flex items-center justify-center p-8">
-            <p className="text-danger">Error loading experts: {error.message}</p>
-          </div>
-        )}
-
         {/* Search and Filter Bar */}
-        {!loading && !error && (
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
@@ -590,10 +605,9 @@ export function ExpertsTable() {
             )}
           </div>
         </div>
-        )}
         
         {/* Active Filter Badges */}
-        {!loading && !error && activeFilterCount > 0 && (
+        {activeFilterCount > 0 && (
           <div className="flex flex-wrap items-center gap-2">
             {filters.locations.size > 0 && (
               <Badge variant="secondary" className="text-xs">
@@ -638,14 +652,25 @@ export function ExpertsTable() {
         )}
       </div>
 
-        {/* Table - only this section scrolls */}
-        {!loading && !error && (
-        <div className="card-terminal flex-1 min-h-0 flex flex-col overflow-hidden">
-        <div ref={tableScrollRef} className="flex-1 min-h-0 overflow-auto overflow-x-auto">
-          <table className="w-full">
-            <thead className="sticky top-0 bg-surface-1 z-10">
-              <tr className="border-b border-border">
-                <th className="p-4 text-left w-12">
+      {/* Table – fixed width and height so list never shrinks when searching/filtering */}
+      <div className="card-terminal flex-1 min-h-[60vh] w-full min-w-0 flex flex-col overflow-hidden">
+        <div ref={tableScrollRef} className="flex-1 min-h-[50vh] w-full min-w-0 overflow-y-auto overflow-x-hidden">
+          <table className="w-full min-w-full table-fixed border-collapse">
+            <colgroup>
+              <col className="w-[2.5%]" />
+              <col className="w-[23%]" />
+              <col className="w-[7%]" />
+              <col className="w-[8%]" />
+              <col className="w-[9%]" />
+              <col className="w-[7%]" />
+              <col className="w-[8%]" />
+              <col className="w-[7%]" />
+              <col className="w-[15%]" />
+              <col className="w-[5%]" />
+            </colgroup>
+            <thead className="sticky top-0 bg-surface-1 z-10 border-b border-border">
+              <tr>
+                <th className="py-3 px-3 text-left align-middle">
                   <Checkbox
                     checked={filteredExperts.length > 0 && filteredExperts.every(e => {
                       const id = e.id || (e as any)._id || e.github_username;
@@ -659,21 +684,21 @@ export function ExpertsTable() {
                     }) ? "Deselect all filtered experts" : "Select all filtered experts"}
                   />
                 </th>
-                <th className="p-4 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground font-semibold">Name</th>
-                <th className="p-4 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground font-semibold">Git Grade</th>
-                <th className="p-4 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground font-semibold">Status</th>
-                <th className="p-4 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground font-semibold">Email</th>
-                <th className="p-4 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground font-semibold">Test</th>
-                <th className="p-4 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground font-semibold">Interview</th>
-                <th className="p-4 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground font-semibold">Result</th>
-                <th className="p-4 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground font-semibold">Skills</th>
-                <th className="p-4 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground font-semibold w-12"></th>
+                <th className="py-3 px-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground align-middle">Name</th>
+                <th className="py-3 px-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground align-middle">Grade</th>
+                <th className="py-3 px-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground align-middle">Status</th>
+                <th className="py-3 px-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground align-middle">Email</th>
+                <th className="py-3 px-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground align-middle">Test</th>
+                <th className="py-3 px-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground align-middle">Interview</th>
+                <th className="py-3 px-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground align-middle">Result</th>
+                <th className="py-3 px-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground align-middle">Skills</th>
+                <th className="py-3 px-2 w-12 min-w-[3rem] align-middle text-right" aria-label="Actions" />
               </tr>
             </thead>
             <tbody>
               {paginatedExperts.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="p-12 text-center">
+                  <td colSpan={10} className="py-16 px-6 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <User className="w-12 h-12 text-muted-foreground/50" />
                       <p className="text-sm font-medium text-foreground">No experts found</p>
@@ -712,7 +737,7 @@ export function ExpertsTable() {
                     )}
                   >
                     <td 
-                      className="p-4 w-12" 
+                      className="py-3 px-3 align-middle" 
                       onClick={(e) => {
                         e.stopPropagation();
                         if (expertId) {
@@ -731,59 +756,64 @@ export function ExpertsTable() {
                         className="border-muted-foreground data-[state=checked]:bg-primary data-[state=checked]:border-primary cursor-pointer"
                       />
                     </td>
-                    <td className="p-4">
-                      <div className="space-y-1">
-                        <div className="font-medium text-foreground group-hover:text-primary transition-colors">{expert.name}</div>
+                    <td className="py-3 px-3 align-middle min-w-0">
+                      <div className="min-w-0">
+                        <div className="font-medium text-foreground group-hover:text-primary transition-colors truncate" title={expert.name}>
+                          {expert.name}
+                        </div>
                         {expert.email && (
-                          <div className="text-xs text-muted-foreground font-mono">{expert.email}</div>
+                          <div className="text-xs text-muted-foreground truncate" title={expert.email}>
+                            {expert.email}
+                          </div>
                         )}
                       </div>
                     </td>
-                    <td className="p-4">
+                    <td className="py-3 px-3 align-middle whitespace-nowrap">
                       <span className={getGradePillClass(gitGrade)}>
                         {gitGrade}
                       </span>
                     </td>
-                    <td className="p-4">
-                      <span className={status.className}>{status.label}</span>
+                    <td className="py-3 px-3 align-middle whitespace-nowrap">
+                      <span className={`text-xs ${status.className}`}>{status.label}</span>
                     </td>
-                    <td className="p-4">
-                      <span className={`text-xs font-mono ${workflowLabels.emailSent[expert.workflow.emailSent].className}`}>
+                    <td className="py-3 px-3 align-middle whitespace-nowrap">
+                      <span className={`text-xs ${workflowLabels.emailSent[expert.workflow.emailSent].className}`}>
                         {workflowLabels.emailSent[expert.workflow.emailSent].label}
                       </span>
                     </td>
-                    <td className="p-4">
-                      <span className={`text-xs font-mono ${workflowLabels.testSent[expert.workflow.testSent].className}`}>
+                    <td className="py-3 px-3 align-middle whitespace-nowrap">
+                      <span className={`text-xs ${workflowLabels.testSent[expert.workflow.testSent].className}`}>
                         {workflowLabels.testSent[expert.workflow.testSent].label}
                       </span>
                     </td>
-                    <td className="p-4">
-                      <span className={`text-xs font-mono ${workflowLabels.interview[expert.workflow.interview].className}`}>
+                    <td className="py-3 px-3 align-middle whitespace-nowrap">
+                      <span className={`text-xs ${workflowLabels.interview[expert.workflow.interview].className}`}>
                         {workflowLabels.interview[expert.workflow.interview].label}
                       </span>
                     </td>
-                    <td className="p-4">
-                      <span className={`text-xs font-mono ${workflowLabels.interviewResult[expert.workflow.interviewResult].className}`}>
+                    <td className="py-3 px-3 align-middle whitespace-nowrap">
+                      <span className={`text-xs ${workflowLabels.interviewResult[expert.workflow.interviewResult].className}`}>
                         {workflowLabels.interviewResult[expert.workflow.interviewResult].label}
                       </span>
                     </td>
-                    <td className="p-4">
-                      <div className="flex flex-wrap gap-1">
+                    <td className="py-3 px-3 align-middle min-w-0">
+                      <div className="flex flex-wrap gap-1 min-w-0">
                         {expert.skills.slice(0, 2).map((skill) => (
-                          <span key={skill} className="skill-tag">
+                          <span key={skill} className="skill-tag truncate max-w-full inline-block">
                             {skill}
                           </span>
                         ))}
                       </div>
                     </td>
-                    <td className="p-4 w-12">
+                    <td className="py-3 px-2 align-middle overflow-visible">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <button 
                             onClick={(e) => e.stopPropagation()}
-                            className="p-1.5 rounded hover:bg-surface-3 transition-colors opacity-0 group-hover:opacity-100"
+                            className="shrink-0 p-2 rounded-md bg-surface-2/60 hover:bg-surface-3 border border-border/50 hover:border-border transition-all opacity-60 group-hover:opacity-100 group-hover:bg-surface-3 group-hover:border-border inline-flex items-center justify-center"
+                            aria-label="Row actions"
                           >
-                            <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+                            <MoreHorizontal className="w-5 h-5 text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
                           </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="bg-surface-1 border-border w-48">
@@ -990,7 +1020,6 @@ export function ExpertsTable() {
           </div>
         )}
       </div>
-        )}
 
       {/* Modals */}
       <AddExpertsModal 

@@ -59,6 +59,7 @@ export interface MongoDBExpert {
 type Expert = MongoDBExpert;
 
 export interface ExpertWithDisplay extends Expert {
+  id: string;
   name: string;
   email: string;
   role: string;

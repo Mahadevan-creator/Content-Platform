@@ -564,17 +564,17 @@ export function IdeaGeneration() {
   // Task Detail View
   if (viewMode === 'taskDetail' && selectedTask && selectedRepo) {
     return (
-      <div className="flex flex-col h-full">
-        <div className="flex items-center gap-4 mb-6">
+      <div className="flex flex-col h-full min-h-[60vh]">
+        <div className="flex items-center gap-5 mb-8">
           <button
             onClick={handleBackToTasks}
-            className="p-2 rounded-lg hover:bg-surface-2 transition-colors"
+            className="p-2.5 rounded-lg hover:bg-surface-2 transition-colors"
           >
             <ArrowLeft className="w-5 h-5 text-muted-foreground" />
           </button>
           <div className="flex-1">
-            <h2 className="text-xl font-semibold text-foreground">Task Idea</h2>
-            <p className="text-sm text-muted-foreground font-mono">
+            <h2 className="text-2xl font-semibold text-foreground">Task Idea</h2>
+            <p className="text-sm text-muted-foreground font-mono mt-0.5">
               From {selectedRepo.repoName}
             </p>
           </div>
@@ -610,9 +610,9 @@ export function IdeaGeneration() {
           )}
         </div>
 
-        <div className="card-terminal p-6 flex-1 overflow-y-auto">
+        <div className="card-terminal p-6 sm:p-8 flex-1 overflow-y-auto min-h-[50vh]">
           {/* Source Repo Banner */}
-          <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 mb-6">
+          <div className="bg-primary/10 border border-primary/20 rounded-xl p-5 mb-8">
             <div className="flex items-center gap-3 mb-2">
               <GitBranch className="w-5 h-5 text-primary" />
               <span className="text-sm font-medium text-primary">Inspiration Source</span>
@@ -629,9 +629,9 @@ export function IdeaGeneration() {
           </div>
 
           {/* Task Title & Badges */}
-          <div className="mb-6">
-            <div className="flex items-center gap-3 mb-3">
-              <h3 className="text-2xl font-semibold text-foreground">{selectedTask.title}</h3>
+          <div className="mb-8">
+            <div className="flex items-center gap-3 mb-4">
+              <h3 className="text-2xl sm:text-3xl font-semibold text-foreground">{selectedTask.title}</h3>
               {selectedTask.status === 'approved' && (
                 <span className="px-2 py-1 bg-terminal-green/20 text-terminal-green text-xs font-medium rounded">
                   Approved
@@ -654,14 +654,14 @@ export function IdeaGeneration() {
           </div>
 
           {/* Stack */}
-          <div className="mb-6">
+          <div className="mb-8">
             <h4 className="text-sm font-mono uppercase text-muted-foreground mb-3 flex items-center gap-2">
               <Layers className="w-4 h-4" />
               Tech Stack
             </h4>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2.5">
               {selectedTask.stack.map(tech => (
-                <span key={tech} className="px-2 py-1 bg-surface-2 text-foreground text-sm font-mono rounded">
+                <span key={tech} className="px-3 py-1.5 bg-surface-2 text-foreground text-sm font-mono rounded-lg">
                   {tech}
                 </span>
               ))}
@@ -669,16 +669,16 @@ export function IdeaGeneration() {
           </div>
 
           {/* Task Description */}
-          <div className="mb-8">
+          <div className="mb-10">
             <h4 className="text-sm font-mono uppercase text-muted-foreground mb-3 flex items-center gap-2">
               <Target className="w-4 h-4" />
               Task Description
             </h4>
-            <p className="text-foreground leading-relaxed">{selectedTask.description}</p>
+            <p className="text-foreground leading-relaxed text-base">{selectedTask.description}</p>
           </div>
 
           {/* Interview Context */}
-          <div className="bg-terminal-amber/10 border border-terminal-amber/20 rounded-lg p-4">
+          <div className="bg-terminal-amber/10 border border-terminal-amber/20 rounded-xl p-5">
             <div className="flex items-center gap-3 mb-3">
               <Users className="w-5 h-5 text-terminal-amber" />
               <span className="text-sm font-medium text-terminal-amber">Live Interview Task</span>
@@ -701,16 +701,16 @@ export function IdeaGeneration() {
     const someSelected = selectedTaskIds.size > 0;
     
     return (
-      <div className="flex flex-col h-full">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
+      <div className="flex flex-col h-full min-h-[60vh]">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-5 mb-8">
           <button
             onClick={handleBackToRepos}
-            className="p-2 rounded-lg hover:bg-surface-2 transition-colors w-fit"
+            className="p-2.5 rounded-lg hover:bg-surface-2 transition-colors w-fit"
           >
             <ArrowLeft className="w-5 h-5 text-muted-foreground" />
           </button>
           <div className="flex-1">
-            <h2 className="text-lg sm:text-xl font-semibold text-foreground">Task Ideas</h2>
+            <h2 className="text-xl sm:text-2xl font-semibold text-foreground">Task Ideas</h2>
             <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground font-mono">
               <GitBranch className="w-3.5 h-3.5" />
               <span className="truncate max-w-[200px] sm:max-w-none">{selectedRepo.repoName}</span>
@@ -730,14 +730,14 @@ export function IdeaGeneration() {
         </div>
 
         {/* Build Action Bar */}
-        <div className="card-terminal p-3 mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+        <div className="card-terminal p-4 sm:p-5 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
             <Checkbox
               checked={allSelected}
               onCheckedChange={() => allSelected ? clearSelection() : selectAllTasks()}
               className="border-muted-foreground data-[state=checked]:bg-primary data-[state=checked]:border-primary"
             />
-            <span className="text-xs sm:text-sm text-muted-foreground">
+            <span className="text-sm text-muted-foreground">
               {selectedTaskIds.size > 0 ? `${selectedTaskIds.size} selected` : 'Select approved tasks to build'}
             </span>
             {someSelected && (
@@ -753,7 +753,7 @@ export function IdeaGeneration() {
             onClick={handleBuildSelected}
             disabled={!someSelected}
             className={cn(
-              "flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors w-full sm:w-auto",
+              "flex items-center justify-center gap-2 px-5 py-3 rounded-lg font-medium text-sm transition-colors w-full sm:w-auto",
               someSelected
                 ? "bg-primary text-primary-foreground hover:bg-primary/90"
                 : "bg-surface-2 text-muted-foreground cursor-not-allowed"
@@ -764,18 +764,18 @@ export function IdeaGeneration() {
           </button>
         </div>
 
-        <div className="card-terminal flex-1 overflow-hidden">
+        <div className="card-terminal flex-1 overflow-hidden min-h-[50vh]">
           <div className="overflow-x-auto h-full">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="p-4 w-12"></th>
-                  <th className="p-4 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground">Task</th>
-                  <th className="p-4 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground">Status</th>
-                  <th className="p-4 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground">Difficulty</th>
-                  <th className="p-4 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground">Category</th>
-                  <th className="p-4 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground">Actions</th>
-                  <th className="p-4 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground">Built Link</th>
+                  <th className="p-5 w-14"></th>
+                  <th className="p-5 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground">Task</th>
+                  <th className="p-5 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground">Status</th>
+                  <th className="p-5 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground">Difficulty</th>
+                  <th className="p-5 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground">Category</th>
+                  <th className="p-5 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground">Actions</th>
+                  <th className="p-5 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground">Built Link</th>
                 </tr>
               </thead>
               <tbody>
@@ -785,7 +785,7 @@ export function IdeaGeneration() {
                     onClick={() => handleTaskClick(task)}
                     className="table-row-hover cursor-pointer border-b border-border/50"
                   >
-                    <td className="p-4" onClick={(e) => e.stopPropagation()}>
+                    <td className="p-5" onClick={(e) => e.stopPropagation()}>
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -809,18 +809,18 @@ export function IdeaGeneration() {
                         </Tooltip>
                       </TooltipProvider>
                     </td>
-                    <td className="p-4">
+                    <td className="p-5">
                       <div className="flex items-start gap-3">
                         <Code className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
                         <div>
-                          <span className="font-medium text-foreground">{task.title}</span>
+                          <span className="font-medium text-foreground text-sm">{task.title}</span>
                           <div className="text-xs text-muted-foreground line-clamp-1 mt-1">
                             {task.description}
                           </div>
                         </div>
                       </div>
                     </td>
-                    <td className="p-4">
+                    <td className="p-5">
                       {task.status === 'approved' ? (
                         <span className="px-2 py-1 bg-terminal-green/20 text-terminal-green text-xs font-medium rounded">
                           Approved
@@ -835,17 +835,17 @@ export function IdeaGeneration() {
                         </span>
                       )}
                     </td>
-                    <td className="p-4">
-                      <span className={cn("px-2 py-1 rounded text-xs font-mono", getDifficulty(task.difficulty).className)}>
+                    <td className="p-5">
+                      <span className={cn("px-2.5 py-1 rounded text-xs font-mono", getDifficulty(task.difficulty).className)}>
                         {getDifficulty(task.difficulty).label}
                       </span>
                     </td>
-                    <td className="p-4">
-                      <span className={cn("px-2 py-1 rounded text-xs font-mono", getCategory(task.category).className)}>
+                    <td className="p-5">
+                      <span className={cn("px-2.5 py-1 rounded text-xs font-mono", getCategory(task.category).className)}>
                         {getCategory(task.category).label}
                       </span>
                     </td>
-                    <td className="p-4" onClick={(e) => e.stopPropagation()}>
+                    <td className="p-5" onClick={(e) => e.stopPropagation()}>
                       {task.status === 'pending' ? (
                         <div className="flex items-center gap-1">
                           <button
@@ -867,7 +867,7 @@ export function IdeaGeneration() {
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </td>
-                    <td className="p-4" onClick={(e) => e.stopPropagation()}>
+                    <td className="p-5" onClick={(e) => e.stopPropagation()}>
                       {task.builtLink ? (
                         <a
                           href={task.builtLink}
@@ -895,34 +895,34 @@ export function IdeaGeneration() {
 
   // Repos View (default)
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-[60vh]">
       {/* Header */}
-      <div className="mb-4 sm:mb-6">
-        <h2 className="text-lg sm:text-xl font-semibold text-foreground">Builder</h2>
-        <p className="text-xs sm:text-sm text-muted-foreground font-mono">
+      <div className="mb-6 sm:mb-8">
+        <h2 className="text-xl sm:text-2xl font-semibold text-foreground">Builder</h2>
+        <p className="text-sm text-muted-foreground font-mono mt-1">
           Analyze GitHub repos to generate task ideas
         </p>
       </div>
 
       {/* Input Section */}
-      <div className="card-terminal p-3 sm:p-4 mb-4">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+      <div className="card-terminal p-5 sm:p-6 mb-6">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
           <div className="flex-1 relative">
-            <GitBranch className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <GitBranch className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
             <input
               type="text"
               value={repoUrl}
               onChange={(e) => setRepoUrl(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAnalyze()}
               placeholder="https://github.com/username/repository"
-              className="input-terminal w-full pl-11 text-sm"
+              className="input-terminal w-full pl-12 py-3 text-base"
             />
           </div>
           <button
             onClick={handleAnalyze}
             disabled={!repoUrl.trim() || isAnalyzing}
             className={cn(
-              "action-btn action-btn-primary px-4 sm:px-6 py-3 flex items-center justify-center gap-2 w-full sm:w-auto",
+              "action-btn action-btn-primary px-5 sm:px-6 py-3.5 flex items-center justify-center gap-2 w-full sm:w-auto text-sm font-medium",
               (!repoUrl.trim() || isAnalyzing) && "opacity-50 cursor-not-allowed"
             )}
           >
@@ -942,24 +942,24 @@ export function IdeaGeneration() {
       </div>
 
       {/* Search and Stack Filter */}
-      <div className="card-terminal p-3 sm:p-4 mb-4">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
+      <div className="card-terminal p-5 sm:p-6 mb-6">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
           {/* Search */}
           <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search repositories..."
-              className="input-terminal w-full pl-11 text-sm"
+              className="input-terminal w-full pl-12 py-3 text-base"
             />
           </div>
           
           {/* Stack Filter Dropdown */}
           <Popover>
             <PopoverTrigger asChild>
-              <button className="flex items-center justify-center gap-2 px-4 py-2.5 bg-surface-2 hover:bg-surface-3 rounded-lg text-sm font-medium transition-colors w-full sm:w-auto">
+              <button className="flex items-center justify-center gap-2 px-5 py-3 bg-surface-2 hover:bg-surface-3 rounded-lg text-sm font-medium transition-colors w-full sm:w-auto">
                 <Layers className="w-4 h-4 text-muted-foreground" />
                 <span className="text-foreground">
                   {selectedStacks.length === 0 
@@ -1002,14 +1002,14 @@ export function IdeaGeneration() {
       </div>
 
       {/* Results Table */}
-      <div className="card-terminal flex-1 overflow-hidden">
+      <div className="card-terminal flex-1 overflow-hidden min-h-[50vh]">
         <div className="overflow-x-auto h-full">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border">
-                <th className="p-4 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground">Repository</th>
-                <th className="p-4 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground">Stacks</th>
-                <th className="p-4 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground">Task Ideas</th>
+                <th className="p-5 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground">Repository</th>
+                <th className="p-5 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground">Stacks</th>
+                <th className="p-5 text-left text-xs font-mono uppercase tracking-wider text-muted-foreground">Task Ideas</th>
               </tr>
             </thead>
             <tbody>
@@ -1027,10 +1027,10 @@ export function IdeaGeneration() {
                       analysis.status === 'completed' && "cursor-pointer"
                     )}
                   >
-                    <td className="p-4">
-                      <div className="flex items-center gap-2">
-                        <GitBranch className="w-4 h-4 text-muted-foreground" />
-                        <span className="font-mono text-sm text-foreground">{analysis.repoName}</span>
+                    <td className="p-5">
+                      <div className="flex items-center gap-3">
+                        <GitBranch className="w-5 h-5 text-muted-foreground" />
+                        <span className="font-mono text-base text-foreground">{analysis.repoName}</span>
                         <a
                           href={analysis.repoUrl}
                           target="_blank"
@@ -1042,25 +1042,25 @@ export function IdeaGeneration() {
                         </a>
                       </div>
                     </td>
-                    <td className="p-4">
-                      <div className="flex flex-wrap gap-1">
+                    <td className="p-5">
+                      <div className="flex flex-wrap gap-2">
                         {repoStacks.map(stack => (
-                          <span key={stack} className="px-2 py-0.5 bg-surface-2 text-muted-foreground text-[10px] font-mono rounded">
+                          <span key={stack} className="px-2.5 py-1 bg-surface-2 text-muted-foreground text-xs font-mono rounded">
                             {stack}
                           </span>
                         ))}
                         {analysis.taskIdeas.flatMap(t => t.stack).length > 4 && (
-                          <span className="px-2 py-0.5 bg-surface-2 text-muted-foreground text-[10px] font-mono rounded">
+                          <span className="px-2.5 py-1 bg-surface-2 text-muted-foreground text-xs font-mono rounded">
                             +more
                           </span>
                         )}
                       </div>
                     </td>
-                    <td className="p-4">
-                      <div className="flex items-center gap-3">
+                    <td className="p-5">
+                      <div className="flex items-center gap-4">
                         <div className="flex items-center gap-2">
-                          <Lightbulb className="w-4 h-4 text-terminal-amber" />
-                          <span className="text-sm font-mono">{analysis.taskIdeas.length}</span>
+                          <Lightbulb className="w-5 h-5 text-terminal-amber" />
+                          <span className="text-base font-mono">{analysis.taskIdeas.length}</span>
                         </div>
                         {approvedCount > 0 && (
                           <span className="px-2 py-0.5 bg-terminal-green/20 text-terminal-green text-xs font-mono rounded">

@@ -96,7 +96,10 @@ export default function Index() {
         )}
         
         <div className="pt-8 px-4 pb-4 md:pt-10 md:px-8 md:pb-8 flex-1 min-h-0 flex flex-col">
-          <div className="max-w-7xl mx-auto flex-1 min-h-0 flex flex-col">
+          <div className={cn(
+            "mx-auto flex-1 min-h-0 flex flex-col w-full",
+            activeSection === 'experts' ? "max-w-7xl" : "max-w-[90rem]"
+          )}>
             <ActiveComponent key={activeSection} />
           </div>
         </div>

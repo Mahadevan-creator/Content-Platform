@@ -81,6 +81,7 @@ Status values: `pending`, `processing`, `completed`, `failed`
 ## Environment Variables
 
 - `GITHUB_TOKEN`: GitHub personal access token (optional but **highly recommended**)
+- **Send Email**: Use Brevo (no app password) or SMTP - see below
 
 ### Setting up GitHub Token
 
@@ -108,6 +109,38 @@ GITHUB_TOKEN=your_token_here
 ```
 
 Then install python-dotenv and load it in main.py (already included in requirements.txt)
+
+### Setting up Send Email (free)
+
+**Option A - Brevo (recommended, no app password needed)**
+
+300 free emails/day forever. Works with any account - no Gmail App Password required.
+
+1. Sign up at https://www.brevo.com (free)
+2. Go to **SMTP & API** → **API Keys** → Create
+3. Add to `.env`:
+```
+BREVO_API_KEY=your-brevo-api-key
+BREVO_FROM_EMAIL=your@email.com
+```
+
+**Option B - SMTP (Gmail, Outlook, etc.)**
+
+Gmail requires an App Password (not available for Workspace/school accounts). If you have a personal Gmail with 2FA, create one at myaccount.google.com/apppasswords
+
+```
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your@gmail.com
+SMTP_PASSWORD=your_app_password
+```
+
+**Troubleshooting (email not received):**
+
+1. **Verify sender in Brevo** – Go to Brevo dashboard → Senders & IPs → Add sender → Add your sender email → Verify with 6-digit code sent to that email.
+2. **Check spam folder** – Emails often land in spam until sender reputation builds.
+3. **Test config** – `GET http://localhost:8001/api/email/test` to verify env vars are loaded.
+4. **Check backend logs** – Look for `📧 Sending email via Brevo` and `✅ Brevo accepted` or `❌ Brevo error`.
 
 **Option 3: Set in your shell profile**
 ```bash

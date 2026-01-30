@@ -63,9 +63,9 @@ export function ProcessingNotification({ jobId, onComplete, onDismiss }: Process
               {isCompleted && <CheckCircle2 className="w-4 h-4 text-terminal-green" />}
               {isFailed && <AlertCircle className="w-4 h-4 text-terminal-red" />}
               <span className="text-sm font-medium text-foreground">
-                {isProcessing && 'Processing Repository Analysis'}
-                {isCompleted && 'Analysis Complete'}
-                {isFailed && 'Analysis Failed'}
+                {isProcessing && 'Adding experts...'}
+                {isCompleted && 'Complete'}
+                {isFailed && 'Failed'}
               </span>
             </div>
 

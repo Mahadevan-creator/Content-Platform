@@ -13,15 +13,18 @@ import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables: backend .env first, then frontend .env as fallback
-load_dotenv()
+# Load environment variables: project root, backend, then frontend
 _backend_dir = Path(__file__).resolve().parent
-_frontend_env = _backend_dir.parent / "frontend" / ".env"
+_project_root = _backend_dir.parent
+load_dotenv(_project_root / ".env")
+load_dotenv(_backend_dir / ".env")
+_frontend_env = _project_root / "frontend" / ".env"
 if _frontend_env.exists():
     load_dotenv(_frontend_env)
 
 from services.github_service import analyze_repository_contributors, get_github_token
 from services.mongodb_service import get_expert, get_expert_by_email, get_mongodb_collection, update_expert_interview, update_expert_interview_completion
+from services.interview_poller import determine_interview_result
 import logging
 
 app = FastAPI(title="Content Platform API", version="1.0.0")
@@ -327,6 +330,13 @@ class SendTestRequest(BaseModel):
     message: Optional[str] = None
 
 
+class SendEmailRequest(BaseModel):
+    to: List[str]  # List of recipient emails (supports bulk)
+    subject: str
+    body: str
+    interest_form_link: Optional[str] = None
+
+
 @app.post("/api/interviews/update-completion")
 async def update_interview_completion(request: UpdateInterviewCompletionRequest):
     """Update interview completion status and result in MongoDB.
@@ -545,12 +555,70 @@ async def send_test_to_candidate(request: SendTestRequest):
         raise HTTPException(status_code=500, detail=error_msg)
 
 
+@app.post("/api/email/send")
+async def send_email_endpoint(request: SendEmailRequest):
+    """Send email(s). Supports bulk.
+    
+    Option A - Brevo (easiest, no app password): BREVO_API_KEY + BREVO_FROM_EMAIL
+    Option B - SMTP: SMTP_HOST, SMTP_USER, SMTP_PASSWORD
+    """
+    from services.email_service import send_email
+    
+    to_list = [e.strip() for e in request.to if e and isinstance(e, str) and "@" in str(e)]
+    if not to_list:
+        raise HTTPException(status_code=400, detail="No valid recipient emails provided")
+    
+    try:
+        result = send_email(
+            to_emails=to_list,
+            subject=request.subject,
+            body=request.body,
+            interest_form_link=request.interest_form_link,
+        )
+        msg = f"Sent to {result['sent']} recipient(s)"
+        if result.get("failed"):
+            msg += f". Failed: {len(result['failed'])}"
+        print(f"✅ {msg}")
+        return {
+            "success": result["success"],
+            "message": msg,
+            "sent": result["sent"],
+            "failed": result.get("failed", []),
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        print(f"❌ Failed to send email: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
+
+
+@app.get("/api/email/test")
+async def test_email_config():
+    """Check if email (Brevo/SMTP) is configured. Does NOT send an email."""
+    brevo_key = os.getenv("BREVO_API_KEY")
+    from_email = os.getenv("BREVO_FROM_EMAIL") or os.getenv("SMTP_USER")
+    smtp_host = os.getenv("SMTP_HOST")
+    status = []
+    if brevo_key:
+        status.append("Brevo: API key set")
+    else:
+        status.append("Brevo: BREVO_API_KEY not set")
+    if from_email:
+        status.append(f"Sender: {from_email}")
+    else:
+        status.append("Sender: BREVO_FROM_EMAIL or SMTP_USER not set")
+    if smtp_host and not brevo_key:
+        status.append(f"SMTP: {smtp_host}")
+    return {"configured": bool(brevo_key or smtp_host), "details": status}
+
+
 class HackerRankWebhookPayload(BaseModel):
     """Webhook payload from HackerRank when interview status changes"""
     interview_id: str
     status: str
     candidate_email: Optional[str] = None
     thumbs_up: Optional[bool] = None
+    result: Optional[str] = None  # "yes" or "no" - maps to pass/fail
     ended_at: Optional[str] = None
 
 
@@ -582,13 +650,19 @@ async def hackerrank_webhook(payload: HackerRankWebhookPayload):
                 "message": f"Could not find candidate for interview {interview_id}"
             }
         
-        # Determine result from thumbs_up if status is completed
+        # Determine result: thumbs_up, then result (yes/no), for completed/ended status
         interview_result = None
-        if interview_status == 'completed':
+        if interview_status in ('completed', 'ended'):
             if payload.thumbs_up is True:
                 interview_result = 'pass'
             elif payload.thumbs_up is False:
                 interview_result = 'fail'
+            elif payload.result:
+                r = str(payload.result).strip().lower()
+                if r in ('yes', 'y'):
+                    interview_result = 'pass'
+                elif r in ('no', 'n'):
+                    interview_result = 'fail'
         
         # Update MongoDB
         update_result = update_expert_interview_completion(
@@ -677,19 +751,12 @@ async def check_all_pending_interviews():
                 r.raise_for_status()
                 interview_data = r.json()
                 
-                # Extract status and determine result
+                # Extract status and determine result (thumbs_up, result yes/no, or feedback)
                 interview_status = interview_data.get('status', 'unknown')
-                interview_result = None
+                interview_result = determine_interview_result(interview_data) if interview_status in ('completed', 'ended') else None
                 
-                if interview_status == 'completed':
-                    thumbs_up = interview_data.get('thumbs_up')
-                    if thumbs_up is True:
-                        interview_result = 'pass'
-                    elif thumbs_up is False:
-                        interview_result = 'fail'
-                
-                # Update MongoDB if status changed
-                if interview_status == 'completed':
+                # Update MongoDB when interview is completed/ended
+                if interview_status in ('completed', 'ended'):
                     update_result = update_expert_interview_completion(
                         email=email,
                         interview_status=interview_status,
@@ -925,7 +992,7 @@ async def process_csv_candidates(job_id: str, csv_file_path: str):
         job_status[job_id]["result"] = {
             "total_candidates": len(usernames),
             "candidates": list(result.keys()),
-            "note": "Same flow as repo-based: fetch_prs_from_json.py → calculate_git_scores.py → MongoDB"
+            "processed": len(usernames),
         }
         
     except Exception as e:
@@ -989,7 +1056,7 @@ async def process_usernames_candidates(job_id: str, usernames: List[str]):
         job_status[job_id]["result"] = {
             "total_candidates": len(usernames),
             "candidates": list(result.keys()),
-            "note": "Same flow as repo-based: fetch_prs_from_json.py → calculate_git_scores.py → MongoDB"
+            "processed": len(usernames),
         }
     except Exception as e:
         job_status[job_id]["status"] = "failed"
@@ -1033,7 +1100,10 @@ async def process_multiple_repositories(job_id: str, repo_urls: List[str]):
         job_status[job_id]["status"] = "completed"
         job_status[job_id]["progress"] = 100.0
         job_status[job_id]["message"] = f"Analysis completed. Found {len(all_analyses)} contributors from {len(repo_urls)} repositories."
-        job_status[job_id]["result"] = result
+        job_status[job_id]["result"] = {
+            "analyses": all_analyses,
+            "total_contributors": len(all_analyses),
+        }
         job_status[job_id]["current_repo"] = None
         
     except Exception as e:

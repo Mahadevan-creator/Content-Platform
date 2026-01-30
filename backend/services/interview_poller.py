@@ -78,22 +78,19 @@ def _parse_feedback_result(feedback: str) -> Optional[str]:
     # Prefer "Overall" rating section - answer format: "**** (4/5) - Yes" or "Yes"/"No"
     for marker in ('overall', 'how would you rate'):
         if marker in text:
-            # Get text after the marker (the answer block)
             idx = text.rfind(marker)
             after = text[idx + len(marker):]
-            # Look for - Yes or - No (common format)
-            if ' - yes' in after or ')- yes' in after:
+            # Look for - Yes or - No (with optional spaces/newlines)
+            if re.search(r'[-)\s]\s*yes\b', after) or ' - yes' in after or ')- yes' in after:
                 return 'pass'
-            if ' - no' in after or ')- no' in after:
+            if re.search(r'[-)\s]\s*no\b', after) or ' - no' in after or ')- no' in after:
                 return 'fail'
-            # Or ends with yes/no
             stripped = after.strip()
             if stripped.endswith('yes'):
                 return 'pass'
             if stripped.endswith('no'):
                 return 'fail'
     # Fallback: last Yes/No in feedback (overall recommendation often last)
-    # Use word boundaries to avoid "none" matching "no", "eyes" matching "yes"
     yes_matches = list(re.finditer(r'\byes\b', text))
     no_matches = list(re.finditer(r'\bno\b', text))
     if yes_matches and (not no_matches or yes_matches[-1].start() > no_matches[-1].start()):
@@ -107,21 +104,30 @@ def determine_interview_result(interview_data: Dict) -> Optional[str]:
     """Determine interview result from HackerRank data.
     
     HackerRank API returns status='ended' when interview is done.
-    Result is parsed from feedback (Yes/No) when thumbs_up is null.
+    Result sources (in order): thumbs_up, direct result field (yes/no), feedback (Yes/No).
     
     Returns: 'pass', 'fail', or None (pending)
     """
     if not interview_data:
         return None
     
-    # thumbs_up can be: 1 (pass), 0 (fail), or None (parse from feedback)
+    # 1. thumbs_up can be: 1 (pass), 0 (fail), or None
     thumbs_up = interview_data.get('thumbs_up')
     if thumbs_up == 1 or thumbs_up is True:
         return 'pass'
     elif thumbs_up == 0 or thumbs_up is False:
         return 'fail'
     
-    # When thumbs_up is null, parse feedback for Yes/No
+    # 2. Direct result field: "yes" -> pass, "no" -> fail (HackerRank may send this)
+    result_val = interview_data.get('result')
+    if result_val is not None:
+        r = str(result_val).strip().lower()
+        if r in ('yes', 'y'):
+            return 'pass'
+        if r in ('no', 'n'):
+            return 'fail'
+    
+    # 3. When thumbs_up and result are null, parse feedback for Yes/No
     feedback = interview_data.get('feedback')
     return _parse_feedback_result(feedback)
 
@@ -133,13 +139,9 @@ def poll_all_pending_interviews():
         logger.error("MongoDB connection not available")
         return
     
-    # Find all experts with scheduled interviews
-    # We check for status='interviewing' OR workflow.interview='scheduled'
+    # Find only candidates whose interview state is 'scheduled' (not yet completed)
     query = {
-        '$or': [
-            {'status': 'interviewing'},
-            {'workflow.interview': 'scheduled'}
-        ],
+        'workflow.interview': 'scheduled',
         'interview_id': {'$exists': True, '$ne': None}
     }
     
@@ -227,7 +229,7 @@ def run_poller():
     logger.info("=" * 80)
     logger.info("Starting Interview Status Poller Service")
     logger.info(f"Poll interval: {POLL_INTERVAL_MINUTES} minutes")
-    logger.info(f"Pulls candidates: status='interviewing' with interview_id")
+    logger.info(f"Pulls candidates: workflow.interview='scheduled' with interview_id")
     logger.info(f"Updates when HackerRank status='ended', result from feedback (Yes/No)")
     logger.info(f"HackerRank API Base: {HACKERRANK_API_BASE}")
     logger.info("=" * 80)

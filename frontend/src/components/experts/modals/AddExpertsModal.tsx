@@ -103,10 +103,13 @@ export function AddExpertsModal({ open, onOpenChange, onContributorsAnalyzed, on
         },
         2000 // Poll every 2 seconds
       ).then((finalStatus) => {
-        if (finalStatus.result) {
+        if (finalStatus.status === 'completed' && finalStatus.result) {
+          const count = finalStatus.result.processed ?? finalStatus.result.total_candidates ?? finalStatus.result.candidates?.length ?? 0;
           toast({
             title: 'CSV processing complete',
-            description: `Successfully processed ${finalStatus.result.processed || 0} candidates from CSV`,
+            description: count > 0
+              ? `Successfully processed ${count} candidate${count === 1 ? '' : 's'} from CSV. PR analysis and git scores are running in background.`
+              : 'CSV processing finished. Check the experts list for updates.',
           });
         }
       }).catch((error) => {
@@ -154,10 +157,13 @@ export function AddExpertsModal({ open, onOpenChange, onContributorsAnalyzed, on
 
       pollJobStatus(jobStatus.job_id, () => {}, 2000)
         .then((finalStatus) => {
-          if (finalStatus.result) {
+          if (finalStatus.status === 'completed' && finalStatus.result) {
+            const count = finalStatus.result.processed ?? finalStatus.result.total_candidates ?? finalStatus.result.candidates?.length ?? 0;
             toast({
               title: 'Usernames processing complete',
-              description: `Successfully processed ${finalStatus.result.total_candidates ?? 0} candidates from usernames`,
+              description: count > 0
+                ? `Successfully processed ${count} candidate${count === 1 ? '' : 's'} from GitHub usernames. PR analysis and git scores are running in background.`
+                : 'Usernames processing finished. Check the experts list for updates.',
             });
           }
         })
@@ -215,15 +221,17 @@ export function AddExpertsModal({ open, onOpenChange, onContributorsAnalyzed, on
         },
         2000 // Poll every 2 seconds
       ).then((finalStatus) => {
-        if (finalStatus.result && finalStatus.result.analyses) {
-          // Call callback with all analyses
-          if (onContributorsAnalyzed) {
-            onContributorsAnalyzed(finalStatus.result.analyses);
+        if (finalStatus.status === 'completed' && finalStatus.result) {
+          const analyses = finalStatus.result.analyses;
+          const count = finalStatus.result.total_contributors ?? analyses?.length ?? 0;
+          if (onContributorsAnalyzed && analyses?.length) {
+            onContributorsAnalyzed(analyses);
           }
-
           toast({
-            title: 'Analysis complete',
-            description: `Successfully analyzed ${finalStatus.result.analyses.length} contributors from ${validUrls.length} repository(ies)`,
+            title: 'Repo analysis complete',
+            description: count > 0
+              ? `Successfully analyzed ${count} contributor${count === 1 ? '' : 's'} from ${validUrls.length} repo${validUrls.length === 1 ? '' : 's'}. PR analysis and git scores are running in background.`
+              : 'Repo analysis finished. Check the experts list for updates.',
           });
         }
       }).catch((error) => {

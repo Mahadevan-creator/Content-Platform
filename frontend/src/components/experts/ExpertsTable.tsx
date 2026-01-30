@@ -263,6 +263,17 @@ export function ExpertsTable() {
     setEmailModalOpen(true);
   };
 
+  const getEmailModalCandidates = (): Array<{ email: string; name?: string }> => {
+    if (selectedExpert) {
+      return selectedExpert.email ? [{ email: selectedExpert.email, name: selectedExpert.name }] : [];
+    }
+    const ids = Array.from(selectedExperts);
+    return ids
+      .map((id) => filteredExperts.find((e) => ((e as any).id || (e as any)._id || e.github_username) === id))
+      .filter((e): e is Expert => !!e && !!e.email)
+      .map((e) => ({ email: e.email, name: e.name }));
+  };
+
   const handleSendTest = (expert: Expert) => {
     setSelectedExpert(expert);
     setTestModalOpen(true);
@@ -929,8 +940,8 @@ export function ExpertsTable() {
       <SendEmailModal 
         open={emailModalOpen} 
         onOpenChange={setEmailModalOpen}
-        candidateEmail={selectedExpert?.email}
-        candidateName={selectedExpert?.name}
+        candidates={getEmailModalCandidates()}
+        onEmailSent={() => refetch()}
       />
       <SendTestModal 
         open={testModalOpen} 

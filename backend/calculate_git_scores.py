@@ -865,7 +865,5 @@ def main():
             logging.info("="*80)
         except Exception as e:
             logging.warning(f"Contact populator failed (experts already stored): {e}")
-
-
 if __name__ == "__main__":
     main()

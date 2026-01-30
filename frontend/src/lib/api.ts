@@ -12,6 +12,9 @@ export interface JobStatus {
     repo_url?: string;
     repo_urls?: string[];
     analyses?: ContributorAnalysis[];
+    total_contributors?: number;
+    total_candidates?: number;
+    candidates?: string[];
     processed?: number;
     failed?: number;
     skipped_bots?: number;
@@ -234,6 +237,35 @@ export interface SendTestResponse {
   test_link?: string;
   candidate_id?: string;
   email?: string;
+}
+
+export interface SendEmailPayload {
+  to: string[];  // List of recipient emails (supports bulk)
+  subject: string;
+  body: string;
+  interest_form_link?: string;
+}
+
+export interface SendEmailResponse {
+  success: boolean;
+  message: string;
+  sent?: number;
+  failed?: string[];
+}
+
+export async function sendEmailToCandidate(payload: SendEmailPayload): Promise<SendEmailResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/email/send`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(typeof err.detail === 'string' ? err.detail : 'Failed to send email');
+  }
+
+  return response.json();
 }
 
 export async function sendTestToCandidate(payload: SendTestPayload): Promise<SendTestResponse> {

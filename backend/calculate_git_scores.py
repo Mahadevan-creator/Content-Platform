@@ -842,6 +842,30 @@ def main():
     
     logging.info(f"Results saved to: {output_file}")
 
+    # Populate social/contact links (email, LinkedIn, portfolio) for every expert and store in DB
+    usernames = [r.get('username') for r in result.get('results', []) if r.get('username')]
+    if usernames:
+        try:
+            from services.email_populator_service import populate_contacts_for_usernames
+            logging.info("")
+            logging.info("="*80)
+            logging.info("Populating contact info (email, LinkedIn, portfolio) for every profile...")
+            logging.info("="*80)
+            pop_result = populate_contacts_for_usernames(
+                usernames,
+                github_token=os.getenv('GITHUB_TOKEN'),
+                use_selenium=False,
+                only_if_missing_email=False,
+            )
+            logging.info(f"Contact populator: updated={pop_result['updated']} skipped={pop_result['skipped']} errors={pop_result['errors']}")
+            for line in pop_result.get('details', [])[:20]:
+                logging.info(f"  {line}")
+            if len(pop_result.get('details', [])) > 20:
+                logging.info(f"  ... and {len(pop_result['details']) - 20} more")
+            logging.info("="*80)
+        except Exception as e:
+            logging.warning(f"Contact populator failed (experts already stored): {e}")
+
 
 if __name__ == "__main__":
     main()

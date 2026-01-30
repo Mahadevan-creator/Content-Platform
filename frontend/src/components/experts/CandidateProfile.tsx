@@ -192,8 +192,9 @@ export function CandidateProfile({ expert, onBack }: CandidateProfileProps) {
       : null);
   const hasHrwReportUrl = hrwTestReportUrl && hrwTestReportUrl.startsWith('http');
   
-  // Social links from MongoDB
+  // Social links from MongoDB (email shown only when present)
   const socialLinks = {
+    email: (expert.email || '').trim(),
     linkedIn: expert.linkedin_url || '',
     twitter: expert.twitter_url || '',
     website: expert.portfolio_url || '',
@@ -280,6 +281,15 @@ export function CandidateProfile({ expert, onBack }: CandidateProfileProps) {
           >
             <Github className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
           </a>
+          {socialLinks.email && (
+            <a
+              href={`mailto:${socialLinks.email}`}
+              className="p-2 rounded-lg hover:bg-surface-2 transition-colors group"
+              title={`Email: ${socialLinks.email}`}
+            >
+              <Mail className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+            </a>
+          )}
           {socialLinks.linkedIn && (
             <a
               href={socialLinks.linkedIn}

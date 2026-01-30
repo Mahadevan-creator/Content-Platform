@@ -159,6 +159,42 @@ def get_expert(github_username: str) -> Optional[Dict]:
         return None
 
 
+def update_expert_contact(
+    github_username: str,
+    email: Optional[str] = None,
+    linkedin_url: Optional[str] = None,
+    portfolio_url: Optional[str] = None,
+) -> Optional[Dict]:
+    """
+    Update expert's contact fields (email, linkedin_url, portfolio_url).
+    Only sets fields that are passed as non-None.
+    """
+    collection = get_mongodb_collection()
+    if collection is None:
+        return None
+    try:
+        from datetime import datetime
+        updates = {"updated_at": datetime.utcnow().isoformat()}
+        if email is not None:
+            updates["email"] = email
+        if linkedin_url is not None:
+            updates["linkedin_url"] = linkedin_url
+        if portfolio_url is not None:
+            updates["portfolio_url"] = portfolio_url
+        if len(updates) <= 1:
+            return get_expert(github_username)
+        result = collection.update_one(
+            {"github_username": github_username},
+            {"$set": updates}
+        )
+        if result.matched_count:
+            return get_expert(github_username)
+        return None
+    except Exception as e:
+        print(f"❌ Error updating expert contact {github_username}: {e}")
+        return None
+
+
 def get_expert_by_email(email: str) -> Optional[Dict]:
     """Get expert data from MongoDB by email address."""
     collection = get_mongodb_collection()

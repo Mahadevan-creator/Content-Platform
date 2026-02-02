@@ -94,6 +94,7 @@ const workflowLabels = {
 
 const statusConfig = {
   available: { label: 'Available', className: 'badge-success' },
+  responded: { label: 'Responded', className: 'badge-responded' },
   assessment: { label: 'Assessment', className: 'badge-warning' },
   interviewing: { label: 'Interviewing', className: 'badge-warning' },
   onboarded: { label: 'Onboarded', className: 'badge-info' },
@@ -106,6 +107,29 @@ const ITEMS_PER_PAGE = 15;
 function canScheduleInterview(expert: Expert): boolean {
   const testSent = expert.workflow?.testSent ?? 'pending';
   return testSent === 'passed' || testSent === 'completed';
+}
+
+/** Contract can only be sent when interview result is pass or strong_pass. */
+function canSendContract(expert: Expert): boolean {
+  const result = expert.workflow?.interviewResult ?? 'pending';
+  return result === 'pass' || result === 'strong_pass';
+}
+
+/** Expert has signed contract (status is contracted). */
+function isContracted(expert: Expert): boolean {
+  return (expert as any).status === 'contracted';
+}
+
+/** Send Email disabled when status is interviewing, assessment, contracted, or onboarded. */
+function canSendEmail(expert: Expert): boolean {
+  const s = (expert as any).status;
+  return s !== 'interviewing' && s !== 'assessment' && s !== 'contracted' && s !== 'onboarded';
+}
+
+/** Provision Tools enabled only when status is contracted or onboarded. */
+function canProvisionTools(expert: Expert): boolean {
+  const s = (expert as any).status;
+  return s === 'contracted' || s === 'onboarded';
 }
 
 export function ExpertsTable() {
@@ -263,13 +287,47 @@ export function ExpertsTable() {
   const findExpertById = useCallback((id: string) =>
     allExperts.find((e) => String((e as any).id ?? (e as any)._id ?? e.github_username ?? '') === String(id)), [allExperts]);
 
-  // Bulk interview: disabled when 1 selected but that expert hasn't passed the test
+  // Bulk interview: disabled when 1 selected but that expert hasn't passed the test or is contracted
   const bulkInterviewFirstExpert = useMemo(() => {
     if (selectedExperts.size !== 1) return null;
     const firstId = Array.from(selectedExperts)[0];
     return firstId ? findExpertById(firstId) : null;
   }, [selectedExperts, findExpertById]);
-  const bulkInterviewDisabled = selectedExperts.size === 1 && (!bulkInterviewFirstExpert || !canScheduleInterview(bulkInterviewFirstExpert));
+  const bulkInterviewDisabled = selectedExperts.size === 1 && (!bulkInterviewFirstExpert || isContracted(bulkInterviewFirstExpert) || !canScheduleInterview(bulkInterviewFirstExpert));
+
+  // Bulk test: disabled when any selected expert is contracted
+  const bulkTestDisabled = useMemo(() => {
+    return Array.from(selectedExperts).some((id) => {
+      const expert = findExpertById(id);
+      return expert && isContracted(expert);
+    });
+  }, [selectedExperts, findExpertById]);
+
+  // Bulk email: disabled when all selected experts have status interviewing/assessment/contracted/onboarded
+  const bulkEmailDisabled = useMemo(() => {
+    if (selectedExperts.size === 0) return true;
+    const eligible = Array.from(selectedExperts)
+      .map((id) => findExpertById(id))
+      .filter((e): e is Expert => !!e && canSendEmail(e));
+    return eligible.length === 0;
+  }, [selectedExperts, findExpertById]);
+
+  // Bulk contract: disabled when 1 selected but that expert can't receive contract (not pass/strong_pass or contracted)
+  const bulkContractFirstExpert = useMemo(() => {
+    if (selectedExperts.size !== 1) return null;
+    const firstId = Array.from(selectedExperts)[0];
+    return firstId ? findExpertById(firstId) : null;
+  }, [selectedExperts, findExpertById]);
+  const bulkContractDisabled = selectedExperts.size !== 1 || !bulkContractFirstExpert || isContracted(bulkContractFirstExpert) || !canSendContract(bulkContractFirstExpert);
+
+  // Bulk provision: disabled when no selected expert has status contracted or onboarded
+  const bulkProvisionDisabled = useMemo(() => {
+    if (selectedExperts.size === 0) return true;
+    const eligible = Array.from(selectedExperts)
+      .map((id) => findExpertById(id))
+      .filter((e): e is Expert => !!e && canProvisionTools(e));
+    return eligible.length === 0;
+  }, [selectedExperts, findExpertById]);
 
   // At least one selected expert has email — show Send Email only then
   const hasSelectedWithEmail = useMemo(() => {
@@ -286,36 +344,53 @@ export function ExpertsTable() {
 
   const getEmailModalCandidates = (): Array<{ email: string; name?: string }> => {
     if (selectedExpert) {
-      return selectedExpert.email ? [{ email: selectedExpert.email, name: selectedExpert.name }] : [];
+      if (!selectedExpert.email || !canSendEmail(selectedExpert)) return [];
+      return [{ email: selectedExpert.email, name: selectedExpert.name }];
     }
     const ids = Array.from(selectedExperts);
     return ids
       .map((id) => findExpertById(id))
-      .filter((e): e is Expert => !!e && !!e.email)
+      .filter((e): e is Expert => !!e && !!e.email && canSendEmail(e))
       .map((e) => ({ email: e.email, name: e.name }));
   };
 
   const getTestModalCandidates = (): Array<{ email: string; name?: string }> => {
-    // Bulk: return all selected experts with email
+    // Bulk: return all selected experts with email (exclude contracted)
     if (selectedExperts.size > 1) {
       return Array.from(selectedExperts)
         .map((id) => findExpertById(id))
-        .filter((e): e is Expert => !!e && !!e.email)
+        .filter((e): e is Expert => !!e && !!e.email && !isContracted(e))
         .map((e) => ({ email: e.email, name: e.name }));
     }
-    // Single: use selectedExpert
-    if (selectedExpert?.email) {
+    // Single: use selectedExpert (exclude contracted)
+    if (selectedExpert?.email && !isContracted(selectedExpert)) {
       return [{ email: selectedExpert.email, name: selectedExpert.name }];
     }
     return [];
   };
 
   const handleSendTest = (expert: Expert) => {
+    if (isContracted(expert)) {
+      toast({
+        title: 'Cannot send test',
+        description: 'This candidate has already signed the contract.',
+        variant: 'destructive',
+      });
+      return;
+    }
     setSelectedExpert(expert);
     setTestModalOpen(true);
   };
 
   const handleScheduleInterview = (expert: Expert) => {
+    if (isContracted(expert)) {
+      toast({
+        title: 'Cannot schedule interview',
+        description: 'This candidate has already signed the contract.',
+        variant: 'destructive',
+      });
+      return;
+    }
     if (!canScheduleInterview(expert)) {
       const testSent = expert.workflow?.testSent ?? 'pending';
       const reason = testSent === 'failed'
@@ -332,14 +407,30 @@ export function ExpertsTable() {
     setInterviewModalOpen(true);
   };
 
+  const handleSendContract = (expert: Expert) => {
+    if (isContracted(expert)) {
+      toast({
+        title: 'Cannot send contract',
+        description: 'This candidate has already signed the contract.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!canSendContract(expert)) {
+      toast({
+        title: 'Cannot send contract',
+        description: 'Candidate must pass the interview first (Result: Pass or Strong Pass).',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setSelectedExpert(expert);
+    setContractModalOpen(true);
+  };
+
   const handleSetInterviewResult = (expert: Expert) => {
     setSelectedExpert(expert);
     setInterviewResultModalOpen(true);
-  };
-
-  const handleSendContract = (expert: Expert) => {
-    setSelectedExpert(expert);
-    setContractModalOpen(true);
   };
 
   const handleProvisionTools = (expert: Expert) => {
@@ -354,6 +445,14 @@ export function ExpertsTable() {
   };
 
   const handleBulkTest = () => {
+    if (bulkTestDisabled) {
+      toast({
+        title: 'Cannot send test',
+        description: 'One or more selected candidates have already signed the contract.',
+        variant: 'destructive',
+      });
+      return;
+    }
     const firstId = Array.from(selectedExperts)[0];
     const firstExpert = firstId ? findExpertById(firstId) : null;
     setSelectedExpert(firstExpert || null);
@@ -371,7 +470,16 @@ export function ExpertsTable() {
     }
     const firstId = Array.from(selectedExperts)[0];
     const firstExpert = firstId ? findExpertById(firstId) : null;
-    if (!firstExpert || !canScheduleInterview(firstExpert)) {
+    if (!firstExpert) return;
+    if (isContracted(firstExpert)) {
+      toast({
+        title: 'Cannot schedule interview',
+        description: 'This candidate has already signed the contract.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!canScheduleInterview(firstExpert)) {
       const testSent = firstExpert?.workflow?.testSent ?? 'pending';
       const reason = testSent === 'failed'
         ? 'This candidate failed the assessment.'
@@ -388,7 +496,31 @@ export function ExpertsTable() {
   };
 
   const handleBulkContract = () => {
-    setSelectedExpert(null);
+    if (bulkContractDisabled) {
+      const first = bulkContractFirstExpert;
+      if (!first) {
+        toast({ title: 'Select one candidate', variant: 'destructive' });
+        return;
+      }
+      if (isContracted(first)) {
+        toast({
+          title: 'Cannot send contract',
+          description: 'This candidate has already signed the contract.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (!canSendContract(first)) {
+        toast({
+          title: 'Cannot send contract',
+          description: 'Candidate must pass the interview first (Result: Pass or Strong Pass).',
+          variant: 'destructive',
+        });
+        return;
+      }
+      return;
+    }
+    setSelectedExpert(bulkContractFirstExpert);
     setContractModalOpen(true);
   };
 
@@ -481,8 +613,8 @@ export function ExpertsTable() {
                   variant="outline"
                   size="sm"
                   onClick={handleBulkEmail}
-                  disabled={!hasSelectedWithEmail}
-                  title={!hasSelectedWithEmail ? 'No selected expert has an email' : undefined}
+                  disabled={bulkEmailDisabled}
+                  title={bulkEmailDisabled ? 'All selected candidates are in interviewing, assessment, contracted, or onboarded status' : undefined}
                   className="flex items-center gap-2 text-xs sm:text-sm h-8"
                 >
                   <Mail className="w-3.5 h-3.5" />
@@ -493,6 +625,8 @@ export function ExpertsTable() {
                   variant="outline"
                   size="sm"
                   onClick={handleBulkTest}
+                  disabled={bulkTestDisabled}
+                  title={bulkTestDisabled ? 'One or more selected candidates have already signed the contract' : undefined}
                   className="flex items-center gap-2 text-xs sm:text-sm h-8"
                 >
                   <FileText className="w-3.5 h-3.5" />
@@ -508,8 +642,10 @@ export function ExpertsTable() {
                   title={
                     selectedExperts.size > 1
                       ? 'Interviews can only be scheduled for one candidate at a time'
-                      : bulkInterviewDisabled
-                        ? 'Candidate must pass the assessment first'
+                      : bulkInterviewDisabled && bulkInterviewFirstExpert
+                        ? isContracted(bulkInterviewFirstExpert)
+                          ? 'Candidate has already signed the contract'
+                          : 'Candidate must pass the assessment first'
                         : undefined
                   }
                 >
@@ -521,6 +657,18 @@ export function ExpertsTable() {
                   variant="outline"
                   size="sm"
                   onClick={handleBulkContract}
+                  disabled={bulkContractDisabled}
+                  title={
+                    bulkContractDisabled
+                      ? selectedExperts.size !== 1
+                        ? 'Select exactly one candidate'
+                        : bulkContractFirstExpert && isContracted(bulkContractFirstExpert)
+                          ? 'This candidate has already signed the contract'
+                          : bulkContractFirstExpert && !canSendContract(bulkContractFirstExpert)
+                            ? 'Candidate must pass the interview first (Result: Pass or Strong Pass)'
+                            : undefined
+                      : undefined
+                  }
                   className="flex items-center gap-2 text-xs sm:text-sm h-8"
                 >
                   <FileSignature className="w-3.5 h-3.5" />
@@ -531,6 +679,8 @@ export function ExpertsTable() {
                   variant="default"
                   size="sm"
                   onClick={handleBulkProvision}
+                  disabled={bulkProvisionDisabled}
+                  title={bulkProvisionDisabled ? 'Provision Tools is only available for candidates with contracted or onboarded status' : undefined}
                   className="flex items-center gap-2 text-xs sm:text-sm h-8 bg-primary hover:bg-primary/90"
                 >
                   <Wrench className="w-3.5 h-3.5" />
@@ -792,8 +942,8 @@ export function ExpertsTable() {
                       </span>
                     </td>
                     <td className="py-3 px-3 align-middle whitespace-nowrap">
-                      <span className={`text-xs ${workflowLabels.interviewResult[expert.workflow?.interviewResult as keyof typeof workflowLabels.interviewResult]?.className ?? 'text-muted-foreground'}`}>
-                        {workflowLabels.interviewResult[expert.workflow?.interviewResult as keyof typeof workflowLabels.interviewResult]?.label ?? '—'}
+                      <span className={`text-xs ${workflowLabels.interviewResult[expert.workflow.interviewResult as keyof typeof workflowLabels.interviewResult]?.className ?? 'text-muted-foreground'}`}>
+                        {workflowLabels.interviewResult[expert.workflow.interviewResult as keyof typeof workflowLabels.interviewResult]?.label ?? '—'}
                       </span>
                     </td>
                     <td className="py-3 px-3 align-middle min-w-0">
@@ -829,35 +979,43 @@ export function ExpertsTable() {
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem 
-                            className={cn("gap-2", expert.email?.trim() ? "cursor-pointer" : "cursor-not-allowed opacity-60")}
-                            disabled={!expert.email?.trim()}
+                            className={cn("gap-2", canSendEmail(expert) ? "cursor-pointer" : "cursor-not-allowed opacity-60")}
+                            disabled={!canSendEmail(expert)}
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (expert.email?.trim()) handleSendEmail(expert);
+                              if (canSendEmail(expert)) handleSendEmail(expert);
                             }}
-                            title={!expert.email?.trim() ? "No email for this expert" : undefined}
+                            title={!canSendEmail(expert) ? 'Send Email is disabled for candidates in interviewing, assessment, contracted, or onboarded status' : undefined}
                           >
                             <Mail className="w-4 h-4" />
                             <span>Send Email</span>
                           </DropdownMenuItem>
                           <DropdownMenuItem 
-                            className="gap-2 cursor-pointer"
+                            className={cn("gap-2", !isContracted(expert) ? "cursor-pointer" : "cursor-not-allowed opacity-60")}
+                            disabled={isContracted(expert)}
                             onClick={(e) => {
                               e.stopPropagation();
                               handleSendTest(expert);
                             }}
+                            title={isContracted(expert) ? 'Candidate has already signed the contract' : undefined}
                           >
                             <FileText className="w-4 h-4" />
                             <span>Send Test</span>
                           </DropdownMenuItem>
                           <DropdownMenuItem 
-                            className={cn("gap-2", canScheduleInterview(expert) ? "cursor-pointer" : "cursor-not-allowed opacity-60")}
-                            disabled={!canScheduleInterview(expert)}
+                            className={cn("gap-2", !isContracted(expert) && canScheduleInterview(expert) ? "cursor-pointer" : "cursor-not-allowed opacity-60")}
+                            disabled={isContracted(expert) || !canScheduleInterview(expert)}
                             onClick={(e) => {
                               e.stopPropagation();
                               handleScheduleInterview(expert);
                             }}
-                            title={!canScheduleInterview(expert) ? 'Candidate must pass the assessment first' : undefined}
+                            title={
+                              isContracted(expert)
+                                ? 'Candidate has already signed the contract'
+                                : !canScheduleInterview(expert)
+                                  ? 'Candidate must pass the assessment first'
+                                  : undefined
+                            }
                           >
                             <Video className="w-4 h-4" />
                             <span>Schedule Interview</span>
@@ -875,22 +1033,32 @@ export function ExpertsTable() {
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuItem 
-                            className="gap-2 cursor-pointer"
+                            className={cn("gap-2", !isContracted(expert) && canSendContract(expert) ? "cursor-pointer" : "cursor-not-allowed opacity-60")}
+                            disabled={isContracted(expert) || !canSendContract(expert)}
                             onClick={(e) => {
                               e.stopPropagation();
                               handleSendContract(expert);
                             }}
+                            title={
+                              isContracted(expert)
+                                ? 'Candidate has already signed the contract'
+                                : !canSendContract(expert)
+                                  ? 'Candidate must pass the interview first (Result: Pass or Strong Pass)'
+                                  : undefined
+                            }
                           >
                             <FileSignature className="w-4 h-4" />
                             <span>Send Contract</span>
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem 
-                            className="gap-2 cursor-pointer"
+                            className={cn("gap-2", canProvisionTools(expert) ? "cursor-pointer" : "cursor-not-allowed opacity-60")}
+                            disabled={!canProvisionTools(expert)}
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleProvisionTools(expert);
+                              if (canProvisionTools(expert)) handleProvisionTools(expert);
                             }}
+                            title={!canProvisionTools(expert) ? 'Provision Tools is only available for candidates with contracted or onboarded status' : undefined}
                           >
                             <Wrench className="w-4 h-4" />
                             <span>Provision Tools</span>
@@ -1084,6 +1252,8 @@ export function ExpertsTable() {
         onOpenChange={setContractModalOpen}
         candidateName={selectedExpert?.name}
         candidateEmail={selectedExpert?.email}
+        candidatePhone={(selectedExpert as any)?.phone ?? ''}
+        candidateAddress={(selectedExpert as any)?.location ?? ''}
       />
       <ProvisionToolsModal 
         open={provisionModalOpen} 

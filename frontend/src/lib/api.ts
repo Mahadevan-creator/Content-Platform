@@ -298,3 +298,57 @@ export async function sendTestToCandidate(payload: SendTestPayload): Promise<Sen
 
   return response.json();
 }
+
+// DocuSign Contract API
+export interface SendContractPayload {
+  candidate_email: string;
+  candidate_name?: string;
+  candidate_phone?: string;
+  candidate_address?: string;
+  include_nda: boolean;
+  include_contract: boolean;
+}
+
+export interface SendContractResponse {
+  success: boolean;
+  message: string;
+  envelope_id?: string;
+}
+
+export async function sendContractToCandidate(
+  payload: SendContractPayload
+): Promise<SendContractResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/contracts/send-docusign`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(typeof err.detail === 'string' ? err.detail : 'Failed to send contract');
+  }
+
+  return response.json();
+}
+
+export interface ContractStatusResponse {
+  envelope_id: string;
+  status: string;
+  email_subject?: string;
+}
+
+export async function getContractStatus(
+  envelopeId: string,
+  updateDb = true
+): Promise<ContractStatusResponse> {
+  const params = new URLSearchParams();
+  if (!updateDb) params.set('update_db', 'false');
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  const response = await fetch(`${API_BASE_URL}/api/contracts/status/${envelopeId}${qs}`);
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(typeof err.detail === 'string' ? err.detail : 'Failed to fetch contract status');
+  }
+  return response.json();
+}

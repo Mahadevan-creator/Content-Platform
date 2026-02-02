@@ -13,6 +13,37 @@
 # MONGODB_URI = os.getenv("MONGODB_URI")
 # MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "content_platform")
 # MONGODB_COLLECTION_NAME = os.getenv("MONGODB_COLLECTION_NAME", "experts")
+# 2e9cbc9c-e10c-46d1-a486-bae30d70dbba
+
+# private key
+# -----BEGIN RSA PRIVATE KEY-----
+# MIIEowIBAAKCAQEAqSyBFAZpaPne3gYtB+QynImyRwX/0Z1R6DLDn9Kx1eI+DliI
+# xse2pI+H1XC6O9HXQu2+3E1Yjcn1q/YNwhFbJnjU8FcqLnreBl/P28zMDYNKo+dr
+# 9Han/e3vK1qdwG+hQqVkDwmQ4vWyuoXv19oAuoJkCFb3W5Oy4/2UpVEhl0Nu/paV
+# cWJBCxueJOwN2uD+AmbUev5vWcJtiQ98xr+Sk7AqnPfw5Isv/OyXcIPa6scsJEFx
+# rLEMLf5dUTPGvO4ZhYegLBIGM1OAr+nn9jkKYy9ouvdCo0N5oaS2hdNDBLPanZBW
+# gAxHbuHZdMafxK/VQ3gbzsGF4ReXILGjavI2ZwIDAQABAoIBAE7i0c3kr4KkAajG
+# eHkVkAQusVMtGP1Fvsvn4BDGzuZNeWJ3JlCLED/sLgr5Zd4/G4G6GyXfa0uywTxO
+# oFu+fCKUdbcc7i5+XMncI7D67qvebQ/A+jYknnFqYfx1ZNo3M5tAREg+zbEHoTAZ
+# BJ5CqdROuRaqdu3dEa3+sTHlgyRlJ38JDrYDbwRKIuPoqdfBJSQQC1FsbWsd4v7u
+# YCjyHb2KoqTf5mrOlVTaTjPMM4qLq2RD0Wd3SwILHCgmZWGMxyZ4AAqPFVm0xaju
+# ZW5mi2/fgmZvto7HA+XxXMCpxLzuCUXWgLbjsbv/o3HYxQPFYxIgUK0qOHY+N1Rt
+# erfO+wECgYEA/kOXTpvmoj0f32SL+hWFtxY1DlHVYJ63zrL2/xAGoUqj81xQ2m29
+# wJz8Fy3XzPGSBnabkCsCcmeDd9i7uilStOkTernNXeOWnyCb45d7DdWjIX54Vae2
+# 6UuhvzGxtWJc5AzrdDHzAc488xBwXFM5+J7ZIaXvhhoLKFj7VDhM+HUCgYEAqlQw
+# wM9u+q97SGsI13QKnbs6wmVGjdz9op2oLiv7GRh1S37Sa1ms/5BT7T5uEhJpgPRK
+# BZm8Hfxxh3y8j1Meq8Evd7hfu4nSmXhZ9adJbkq1aCiB5ksvHxrcEw5hTpVQvujW
+# sFVMqvU02rgBGJUGjvnWLLXdNewejBxhNOIlN+sCgYBXulJ2WOwWhih9F2AEhXCB
+# XzQnIK0SjTC2LKF0F79x3yL6UJvFAaA62O9RwAt5NtA/UqUR9QT/HCAMNcdvz9ot
+# eU2zRnBJOME7XjDrMdTPTSrf35b9VsSRcfr40NiT0MBkHuEOUj2aHeKBquZZtI2H
+# 7qbUKUCfcFTxMuJkiJhmEQKBgGbz/of8mesiuJTcRXrdZDFU4z5vMsc65YAuZWKL
+# KPpRQ0y/unYyvRO4bFJBYwy/XlAY2Mkr1H4XgZPQfLTxG9/bJFLr+cmEk+w5x75p
+# QERPGfl8SpAlr7TQameGUKDMNgM+/82TsYTANBNkFx2BrnYrYx6hSrV2JDyyRrtN
+# WgvDAoGBAIsRKyT/Eif9XCwzBC7EvFu/DjgKYVqb67eq3iSp131u1+nmeq3xvvOT
+# TYw5ltjPQweb1aytf9z4UNMqFLqjzBtIu7y2M+/H9XEorMQzPyEyi0f9ApH5Lgee
+# C2KPvNQNmpkDWGg2iHZ6EyPlRSSGg909NOOho6jrC6KUf0Dcr5VO
+# -----END RSA PRIVATE KEY-----
+
 
 # _mongodb_client: Optional[MongoClient] = None
 # _mongodb_db: Optional[Database] = None
@@ -641,6 +672,147 @@ def update_expert_contact(
         return None
 
 
+def update_expert_from_form(form_data: Dict) -> Optional[Dict]:
+    """
+    Update expert by GitHub username from Google Form response data.
+    Finds expert by github_username and updates name, email, phone, linkedin, tech_stack, etc.
+
+    Form field mapping (flexible key matching):
+    - Timestamp -> form_submitted_at
+    - Email -> email
+    - Name -> display_name
+    - Phone number -> phone
+    - Github Username -> used to find expert
+    - Which frontend or backend technologies... -> tech_stack (parsed from text)
+    - How many hours per week... -> hours_per_week
+    - Where do you currently work... -> job_title / company
+    - Please provide your Linkedin profile -> linkedin_url
+    - When can you start? -> availability / start_date
+
+    Args:
+        form_data: Dict from Google Form (keys = question titles)
+
+    Returns:
+        Updated document or None if expert not found
+    """
+    collection = get_mongodb_collection()
+    if collection is None:
+        return None
+
+    def _get(key_variants: List[str]) -> Optional[str]:
+        for k in key_variants:
+            v = form_data.get(k)
+            if v is not None:
+                if isinstance(v, list):
+                    v = "; ".join(str(x).strip() for x in v if x)
+                s = str(v).strip()
+                if s:
+                    return s
+        # Also try case-insensitive match for any key containing the variant
+        for variant in key_variants:
+            vn = variant.lower().replace(" ", "").replace("?", "").replace("\n", "")
+            for form_key, form_val in form_data.items():
+                if form_val and (form_key == variant or form_key.lower().replace(" ", "").replace("?", "").replace("\n", "") == vn):
+                    if isinstance(form_val, list):
+                        form_val = "; ".join(str(x).strip() for x in form_val if x)
+                    s = str(form_val).strip()
+                    if s:
+                        return s
+        return None
+
+    github_username = _get([
+        "Github Username", "Github username", "github_username", "GitHub Username",
+        "GitHub username", "github username"
+    ])
+    if not github_username:
+        print("⚠️  Form webhook: no github_username in payload")
+        return None
+
+    expert = collection.find_one({"github_username": github_username})
+    if not expert:
+        print(f"⚠️  Form webhook: expert not found for github_username={github_username}")
+        return None
+
+    from datetime import datetime
+    updates: Dict = {"updated_at": datetime.utcnow().isoformat()}
+
+    email = _get(["Email", "email"])
+    if email:
+        updates["email"] = email
+
+    name = _get(["Name", "name"])
+    if name:
+        updates["display_name"] = name
+
+    phone = _get([
+        "Phone number", "Phone Number", "phone number", "phone", "Phone"
+    ])
+    if phone:
+        updates["phone"] = phone
+
+    linkedin = _get([
+        "Please provide your Linkedin profile", "Please provide your Linkedin profile ",
+        "Linkedin profile", "LinkedIn", "linkedin_url", "LinkedIn profile"
+    ])
+    if linkedin:
+        if linkedin and "linkedin.com" not in linkedin.lower():
+            linkedin = f"https://linkedin.com/in/{linkedin}" if not linkedin.startswith("http") else linkedin
+        updates["linkedin_url"] = linkedin
+
+    tech = _get([
+        "Which frontend or backend technologies are you proficient in ?",
+        "Which frontend or backend technologies are you proficient in?",
+        "Technologies", "tech_stack", "technologies"
+    ])
+    if tech:
+        tech_list = [t.strip() for t in tech.replace(",", ";").split(";") if t.strip()]
+        if tech_list:
+            updates["tech_stack"] = tech_list
+
+    hours = _get([
+        "How many hours per week can you devote ?",
+        "How many hours per week can you devote?",
+        "Hours per week", "hours_per_week"
+    ])
+    if hours:
+        updates["hours_per_week"] = hours
+
+    job_info = _get([
+        "where do you currently work ? what is your job title ?",
+        "where do you currently work ? what is your job title ?\n",
+        "Where do you currently work? What is your job title?",
+        "Job title", "job_title", "Current work"
+    ])
+    if job_info:
+        updates["job_title"] = job_info
+
+    availability = _get([
+        "When can you start ?", "When can you start?",
+        "When can you start ?\n", "Availability", "availability", "Start date"
+    ])
+    if availability:
+        updates["availability"] = availability
+
+    # Always set status to responded when form is submitted
+    updates["status"] = "responded"
+
+    try:
+        result = collection.update_one(
+            {"github_username": github_username},
+            {"$set": updates}
+        )
+        if result.matched_count:
+            updated = collection.find_one({"github_username": github_username})
+            if updated and "_id" in updated:
+                updated["_id"] = str(updated["_id"])
+            print(f"✅ Updated expert {github_username} from form: {list(updates.keys())}")
+            return updated
+        return None
+    except Exception as e:
+        print(f"❌ Error updating expert from form {github_username}: {e}")
+        return None
+
+
 def get_expert_by_email(email: str) -> Optional[Dict]:
     """Get expert data from MongoDB by email address."""
     collection = get_mongodb_collection()
@@ -691,6 +863,170 @@ def update_expert_email_sent(emails: List[str]) -> int:
     except Exception as e:
         print(f"❌ Error updating emailSent for experts: {e}")
         return 0
+
+
+def update_expert_contract_sent(
+    email: str,
+    envelope_id: str,
+) -> Optional[Dict]:
+    """
+    Mark workflow.contractSent as 'sent' and store DocuSign envelope ID for expert.
+
+    Args:
+        email: Email address of the candidate
+        envelope_id: DocuSign envelope ID for tracking
+
+    Returns:
+        Updated document or None if error
+    """
+    collection = get_mongodb_collection()
+    if collection is None:
+        print("⚠️  MongoDB client not available. Skipping contract update.")
+        return None
+
+    try:
+        from datetime import datetime
+        current_time = datetime.utcnow().isoformat()
+
+        expert = collection.find_one({'email': email})
+        if not expert:
+            print(f"⚠️  Expert with email {email} not found in MongoDB")
+            return None
+
+        existing_workflow = expert.get('workflow', {})
+        if not isinstance(existing_workflow, dict):
+            existing_workflow = {}
+
+        if 'emailSent' not in existing_workflow:
+            existing_workflow['emailSent'] = 'pending'
+        if 'testSent' not in existing_workflow:
+            existing_workflow['testSent'] = 'pending'
+        if 'interview' not in existing_workflow:
+            existing_workflow['interview'] = 'pending'
+        if 'interviewResult' not in existing_workflow:
+            existing_workflow['interviewResult'] = 'pending'
+
+        existing_workflow['contractSent'] = 'sent'
+        update_data = {
+            'updated_at': current_time,
+            'workflow': existing_workflow,
+            'docusign_envelope_id': envelope_id,
+        }
+
+        result = collection.update_one(
+            {'email': email},
+            {'$set': update_data}
+        )
+
+        if result.acknowledged and result.modified_count > 0:
+            updated_doc = collection.find_one({'email': email})
+            if updated_doc:
+                if '_id' in updated_doc:
+                    updated_doc['_id'] = str(updated_doc['_id'])
+                print(f"✅ Marked contractSent=sent for {email} (envelope: {envelope_id})")
+                return updated_doc
+            return None
+        else:
+            print(f"⚠️  Update not acknowledged or no changes for {email}")
+            return None
+
+    except Exception as e:
+        print(f"❌ Error updating contract sent for {email}: {e}")
+        return None
+
+
+def get_expert_by_envelope_id(envelope_id: str) -> Optional[Dict]:
+    """
+    Find expert by DocuSign envelope ID.
+
+    Args:
+        envelope_id: DocuSign envelope ID stored when contract was sent
+
+    Returns:
+        Expert document or None if not found
+    """
+    collection = get_mongodb_collection()
+    if collection is None:
+        return None
+    try:
+        result = collection.find_one({"docusign_envelope_id": envelope_id})
+        if result:
+            if "_id" in result:
+                result["_id"] = str(result["_id"])
+            return result
+        return None
+    except Exception as e:
+        print(f"❌ Error fetching expert by envelope_id {envelope_id}: {e}")
+        return None
+
+
+def update_expert_contract_status_by_envelope_id(
+    envelope_id: str,
+    contract_status: str,  # 'sent' | 'signed' | 'voided' | 'declined'
+) -> Optional[Dict]:
+    """
+    Update workflow.contractSent for the expert with the given DocuSign envelope ID.
+
+    Args:
+        envelope_id: DocuSign envelope ID
+        contract_status: 'sent', 'signed', 'voided', or 'declined'
+
+    Returns:
+        Updated document or None if expert not found
+    """
+    expert = get_expert_by_envelope_id(envelope_id)
+    if not expert or not expert.get("email"):
+        return None
+    return update_expert_contract_status(expert["email"], contract_status)
+
+
+def update_expert_contract_status(
+    email: str,
+    contract_status: str,  # 'sent' | 'signed' | 'voided' | 'declined'
+) -> Optional[Dict]:
+    """
+    Update workflow.contractSent status (e.g. when DocuSign envelope is completed).
+    When contract_status is 'signed', also sets status='contracted' (Result column unchanged).
+
+    Args:
+        email: Email address of the candidate
+        contract_status: 'sent', 'signed', 'voided', or 'declined'
+
+    Returns:
+        Updated document or None if error
+    """
+    collection = get_mongodb_collection()
+    if collection is None:
+        return None
+    try:
+        from datetime import datetime
+        expert = collection.find_one({"email": email})
+        if not expert:
+            return None
+        existing_workflow = expert.get("workflow", {}) or {}
+        existing_workflow["contractSent"] = contract_status
+
+        update_fields = {
+            "workflow": existing_workflow,
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+        if contract_status == "signed":
+            update_fields["status"] = "contracted"
+
+        result = collection.update_one(
+            {"email": email},
+            {"$set": update_fields},
+        )
+        if result.modified_count:
+            updated = collection.find_one({"email": email})
+            if updated and "_id" in updated:
+                updated["_id"] = str(updated["_id"])
+            print(f"✅ Updated contract status for {email}: {contract_status}")
+            return updated
+        return None
+    except Exception as e:
+        print(f"❌ Error updating contract status for {email}: {e}")
+        return None
 
 
 def update_expert_interview(email: str, interview_report_url: str, interview_url: str = None) -> Optional[Dict]:

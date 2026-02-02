@@ -1,5 +1,8 @@
-import { useState } from 'react';
-import { FileSignature, FileText, Shield, Send } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { FileSignature, FileText, Shield, Send, Loader2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { sendContractToCandidate } from '@/lib/api';
+import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
@@ -16,22 +19,44 @@ interface SendContractModalProps {
   onOpenChange: (open: boolean) => void;
   candidateName?: string;
   candidateEmail?: string;
+  candidatePhone?: string;
+  candidateAddress?: string;
 }
 
-export function SendContractModal({ open, onOpenChange, candidateName = '', candidateEmail = '' }: SendContractModalProps) {
+export function SendContractModal({ open, onOpenChange, candidateName = '', candidateEmail = '', candidatePhone = '', candidateAddress = '' }: SendContractModalProps) {
   const [includeNda, setIncludeNda] = useState(true);
   const [includeContract, setIncludeContract] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [phone, setPhone] = useState(candidatePhone);
+  const [address, setAddress] = useState(candidateAddress);
 
-  const handleSendDocuSign = () => {
-    console.log('Sending DocuSign:', {
-      candidate: candidateName,
-      email: candidateEmail,
-      documents: {
-        nda: includeNda,
-        contract: includeContract,
-      },
-    });
-    onOpenChange(false);
+  useEffect(() => {
+    setPhone(candidatePhone);
+    setAddress(candidateAddress);
+  }, [candidatePhone, candidateAddress, open]);
+
+  const handleSendDocuSign = async () => {
+    if (!candidateEmail?.trim()) {
+      toast.error('Candidate email is required');
+      return;
+    }
+    setSending(true);
+    try {
+      await sendContractToCandidate({
+        candidate_email: candidateEmail.trim(),
+        candidate_name: candidateName?.trim() || undefined,
+        candidate_phone: phone?.trim() || undefined,
+        candidate_address: address?.trim() || undefined,
+        include_nda: includeNda,
+        include_contract: includeContract,
+      });
+      toast.success('Contract sent! The candidate will receive an email from DocuSign.');
+      onOpenChange(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to send contract');
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -54,6 +79,22 @@ export function SendContractModal({ open, onOpenChange, candidateName = '', cand
               )}
             </div>
           )}
+
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Personal details (pre-filled in document)</Label>
+            <Input
+              placeholder="Phone number"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="bg-surface-2 border-border"
+            />
+            <Input
+              placeholder="Address"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              className="bg-surface-2 border-border"
+            />
+          </div>
           
           <div className="space-y-3">
             <Label className="text-sm font-medium">Select Documents</Label>
@@ -108,6 +149,11 @@ export function SendContractModal({ open, onOpenChange, candidateName = '', cand
               Please select at least one document to send
             </p>
           )}
+          {!candidateEmail?.trim() && (
+            <p className="text-sm text-danger">
+              Candidate email is required to send a contract
+            </p>
+          )}
         </div>
         
         <DialogFooter className="mt-6">
@@ -116,11 +162,15 @@ export function SendContractModal({ open, onOpenChange, candidateName = '', cand
           </Button>
           <Button 
             onClick={handleSendDocuSign} 
-            disabled={!includeNda && !includeContract}
+            disabled={(!includeNda && !includeContract) || !candidateEmail?.trim() || sending}
             className="bg-[#FFD700] hover:bg-[#FFD700]/90 text-black"
           >
-            <Send className="w-4 h-4 mr-2" />
-            Send DocuSign
+            {sending ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Send className="w-4 h-4 mr-2" />
+            )}
+            {sending ? 'Sending...' : 'Send DocuSign'}
           </Button>
         </DialogFooter>
       </DialogContent>

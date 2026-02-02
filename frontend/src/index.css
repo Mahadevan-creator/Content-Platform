@@ -282,6 +282,18 @@
     border-color: hsl(var(--info-border));
   }
   
+  .badge-responded {
+    @apply inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border;
+    background-color: hsl(195 65% 95%);
+    color: hsl(195 85% 38%);
+    border-color: hsl(195 60% 85%);
+  }
+  .dark .badge-responded {
+    background-color: hsl(195 75% 25% / 0.35);
+    color: hsl(195 85% 65%);
+    border-color: hsl(195 70% 35% / 0.5);
+  }
+  
   .badge-error {
     @apply inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border;
     background-color: hsl(var(--danger-bg));

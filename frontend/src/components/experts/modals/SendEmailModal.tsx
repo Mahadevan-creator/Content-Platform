@@ -45,7 +45,7 @@ Best,
 {senderName}
 HackerRank`;
 
-const DEFAULT_INTEREST_FORM_LINK = 'https://forms.gle/eAoqLZERuaeBtpzEA';
+const DEFAULT_INTEREST_FORM_LINK = 'https://forms.gle/F7d41GaKZAbHVCXw7';
 
 function buildEmailBody(candidateName: string, senderName: string): string {
   return EMAIL_TEMPLATE

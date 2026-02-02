@@ -3,11 +3,14 @@ Email service - SMTP only.
 Supports Microsoft 365 (@hackerrank.com), Gmail, Outlook, etc.
 M365: smtp.office365.com:587. Gmail: smtp.gmail.com:587 (App Password required).
 """
+import logging
 import os
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import List
+
+logger = logging.getLogger(__name__)
 
 
 # HackerRank signature assets (match reference email from Siddhant)
@@ -61,7 +64,7 @@ def send_email(
     host = os.getenv("SMTP_HOST")
     port = int(os.getenv("SMTP_PORT", "587"))
     user = os.getenv("SMTP_USER")
-    password = os.getenv("SMTP_PASSWORD")
+    password = os.getenv("SMTP_PASSWORD") or os.getenv("SMTP_PASS")
     from_email = os.getenv("SMTP_FROM_EMAIL") or user
 
     if not all([host, user, password]):
@@ -70,9 +73,18 @@ def send_email(
             "For @hackerrank.com: SMTP_HOST=smtp.office365.com SMTP_PORT=587 SMTP_USER=you@hackerrank.com"
         )
 
+    logger.info(
+        "[Email] Sending to %d recipient(s) via %s:%s (user=%s)",
+        len([e for e in to_emails if e and "@" in str(e)]),
+        host,
+        port,
+        user,
+    )
+
     html_body = _build_html_body(body, interest_form_link, sender_name)
     to_list = [e.strip() for e in to_emails if e and "@" in str(e)]
     if not to_list:
+        logger.warning("[Email] No valid recipient emails")
         return {"success": False, "sent": 0, "sent_emails": [], "failed": ["No valid emails"]}
 
     msg = MIMEMultipart("alternative")
@@ -86,17 +98,40 @@ def send_email(
     failed = []
     try:
         with smtplib.SMTP(host, port) as server:
+            logger.debug("[Email] Connected to %s:%s, starting TLS", host, port)
             server.starttls()
-            server.login(user, password)
+            try:
+                server.login(user, password)
+            except smtplib.SMTPAuthenticationError as auth_err:
+                err_str = str(auth_err)
+                logger.error(
+                    "[Email] SMTP auth failed (host=%s, user=%s): %s",
+                    host,
+                    user,
+                    err_str,
+                )
+                if "535" in err_str or "BadCredentials" in err_str or "Username and Password not accepted" in err_str:
+                    logger.error(
+                        "[Email] TIP: Gmail/M365 require an App Password, not your regular password. "
+                        "Gmail: Google Account → Security → 2-Step Verification → App passwords. "
+                        "M365: Microsoft account → Security → Advanced security → App passwords."
+                    )
+                raise
             for to_email in to_list:
                 try:
                     msg["To"] = to_email
                     server.sendmail(from_email, [to_email], msg.as_string())
                     sent_count += 1
                     sent_emails.append(to_email)
+                    logger.info("[Email] Sent to %s", to_email)
                 except Exception as e:
                     failed.append(f"{to_email}: {str(e)}")
+                    logger.warning("[Email] Failed to send to %s: %s", to_email, e)
+    except smtplib.SMTPAuthenticationError:
+        raise
     except Exception as e:
+        logger.exception("[Email] SMTP error: %s", e)
         return {"success": False, "sent": 0, "sent_emails": [], "failed": [str(e)]}
 
+    logger.info("[Email] Done: sent=%d, failed=%d", sent_count, len(failed))
     return {"success": sent_count > 0, "sent": sent_count, "sent_emails": sent_emails, "failed": failed}

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File
+from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict
@@ -8,6 +8,8 @@ import uuid
 import json
 import os
 import re
+import smtplib
+import xml.etree.ElementTree as ET
 import subprocess
 import sys
 from pathlib import Path
@@ -23,7 +25,7 @@ if _frontend_env.exists():
     load_dotenv(_frontend_env)
 
 from services.github_service import analyze_repository_contributors, get_github_token
-from services.mongodb_service import get_expert, get_expert_by_email, get_mongodb_collection, update_expert_interview, update_expert_interview_completion, update_expert_email_sent
+from services.mongodb_service import get_expert, get_expert_by_email, get_mongodb_collection, update_expert_interview, update_expert_interview_completion, update_expert_email_sent, update_expert_contract_sent, get_expert_by_envelope_id, update_expert_contract_status_by_envelope_id, update_expert_from_form
 from services.interview_poller import determine_interview_result
 import logging
 
@@ -118,6 +120,38 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "healthy"}
+
+
+@app.post("/api/forms/webhook")
+async def forms_webhook(request: Request):
+    """
+    Webhook for Google Form responses. Receives form data (keys = question titles),
+    finds expert by Github Username, and updates their profile (name, email, phone, etc.).
+    """
+    try:
+        body = await request.json()
+        # Print incoming payload to terminal first (for debugging)
+        print("\n" + "=" * 60)
+        print("[Forms webhook] RECEIVED REQUEST")
+        print("=" * 60)
+        print(f"Payload keys: {list(body.keys()) if isinstance(body, dict) else 'not dict'}")
+        if isinstance(body, dict):
+            for k, v in body.items():
+                print(f"  {k!r}: {v!r}")
+        print("=" * 60 + "\n")
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=400, detail="Expected JSON object")
+        result = update_expert_from_form(body)
+        if result is None:
+            github = body.get("Github Username") or body.get("Github username") or body.get("GitHub Username") or "?"
+            return {"status": "not_found", "message": f"Expert with github_username={github} not found in database"}
+        return {"status": "updated", "expert": result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.exception("Forms webhook error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/experts")
 async def get_experts():
@@ -335,6 +369,15 @@ class SendEmailRequest(BaseModel):
     subject: str
     body: str
     interest_form_link: Optional[str] = None
+
+
+class SendContractRequest(BaseModel):
+    candidate_email: str
+    candidate_name: Optional[str] = None
+    candidate_phone: Optional[str] = None
+    candidate_address: Optional[str] = None
+    include_nda: bool = True
+    include_contract: bool = True
 
 
 @app.post("/api/interviews/update-completion")
@@ -564,11 +607,17 @@ async def send_test_to_candidate(request: SendTestRequest):
 async def send_email_endpoint(request: SendEmailRequest):
     """Send email(s). Supports bulk. Requires SMTP_HOST, SMTP_USER, SMTP_PASSWORD."""
     from services.email_service import send_email
-    
+
     to_list = [e.strip() for e in request.to if e and isinstance(e, str) and "@" in str(e)]
     if not to_list:
         raise HTTPException(status_code=400, detail="No valid recipient emails provided")
-    
+
+    logging.info(
+        "[Email API] Sending to %d recipient(s), subject=%s",
+        len(to_list),
+        (request.subject or "")[:60] + ("..." if len(request.subject or "") > 60 else ""),
+    )
+
     try:
         result = send_email(
             to_emails=to_list,
@@ -581,12 +630,12 @@ async def send_email_endpoint(request: SendEmailRequest):
         if result.get("failed"):
             msg += f". Failed: {len(result['failed'])}"
             for f in result["failed"]:
-                print(f"❌ Email failure: {f}")
+                logging.error("[Email API] Failure: %s", f)
         # Mark experts as email sent for successfully delivered emails
         sent_emails = result.get("sent_emails", [])
         if sent_emails:
             update_expert_email_sent(sent_emails)
-        print(f"✅ {msg}")
+        logging.info("[Email API] Result: sent=%d, failed=%d", result["sent"], len(result.get("failed", [])))
         return {
             "success": result["success"],
             "message": msg,
@@ -594,9 +643,16 @@ async def send_email_endpoint(request: SendEmailRequest):
             "failed": result.get("failed", []),
         }
     except ValueError as e:
+        logging.warning("[Email API] Config error: %s", e)
         raise HTTPException(status_code=503, detail=str(e))
+    except smtplib.SMTPAuthenticationError as e:
+        logging.error("[Email API] SMTP auth failed: %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail=f"SMTP authentication failed. Use an App Password (not your regular password). Gmail: Google Account → Security → App passwords. Error: {str(e)}",
+        )
     except Exception as e:
-        print(f"❌ Failed to send email: {e}")
+        logging.exception("[Email API] Send failed: %s", e)
         raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
 
 
@@ -617,6 +673,245 @@ def _get_sender_name() -> str:
 def _get_sender_title() -> str:
     """Get sender job title from SMTP_FROM_TITLE (e.g. Technical Product Manager II)."""
     return os.getenv("SMTP_FROM_TITLE", "").strip()
+
+
+@app.post("/api/contracts/send-docusign")
+async def send_contract_docusign(request: SendContractRequest):
+    """Send NDA and/or Contractor Agreement to candidate via DocuSign.
+    Requires DOCUSIGN_* env vars and template IDs for selected documents."""
+    from services.docusign_service import send_contract_envelope, get_docusign_config
+
+    if not (request.candidate_email and request.candidate_email.strip()):
+        raise HTTPException(
+            status_code=400,
+            detail="candidate_email is required and cannot be empty",
+        )
+
+    # Pre-flight: check config and return clear guidance if missing
+    config = get_docusign_config()
+    if not config.get("configured"):
+        raise HTTPException(
+            status_code=503,
+            detail="DocuSign is not configured. Add DOCUSIGN_INTEGRATION_KEY, DOCUSIGN_USER_ID, DOCUSIGN_ACCOUNT_ID, and DOCUSIGN_PRIVATE_KEY (or DOCUSIGN_PRIVATE_KEY_PATH) to .env",
+        )
+    nda_ok = config.get("nda_template_configured")
+    contract_ok = config.get("contract_template_configured")
+    if request.include_nda and not nda_ok:
+        raise HTTPException(
+            status_code=503,
+            detail="NDA template not configured. Create an NDA template in DocuSign, copy its Template ID, and add DOCUSIGN_NDA_TEMPLATE_ID=your-template-id to .env",
+        )
+    if request.include_contract and not contract_ok:
+        raise HTTPException(
+            status_code=503,
+            detail="Contract template not configured. Create a Contractor Agreement template in DocuSign, copy its Template ID, and add DOCUSIGN_CONTRACT_TEMPLATE_ID=your-template-id to .env",
+        )
+
+    try:
+        result = send_contract_envelope(
+            recipient_email=request.candidate_email.strip(),
+            recipient_name=(request.candidate_name or "").strip() or request.candidate_email,
+            include_nda=request.include_nda,
+            include_contract=request.include_contract,
+            recipient_phone=(request.candidate_phone or "").strip() or None,
+            recipient_address=(request.candidate_address or "").strip() or None,
+        )
+        envelope_id = result.get("envelope_id")
+        if envelope_id:
+            update_expert_contract_sent(
+                email=request.candidate_email.strip(),
+                envelope_id=envelope_id,
+            )
+        return {
+            "success": True,
+            "message": result.get("message", "Contract sent"),
+            "envelope_id": envelope_id,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        err_str = str(e)
+        print(f"❌ DocuSign send failed: {e}")
+        if "consent_required" in err_str:
+            integration_key = os.getenv("DOCUSIGN_INTEGRATION_KEY", "YOUR_INTEGRATION_KEY")
+            oauth_host = os.getenv("DOCUSIGN_OAUTH_HOST", "account.docusign.com")
+            consent_url = f"https://{oauth_host}/oauth/auth?response_type=code&scope=signature%20impersonation&client_id={integration_key}&redirect_uri=https://developers.docusign.com/platform/auth/consent"
+            raise HTTPException(
+                status_code=503,
+                detail=f"DocuSign consent required. Grant JWT consent (one-time): {consent_url}",
+            )
+        raise HTTPException(status_code=502, detail=f"Failed to send contract: {str(e)}")
+
+
+@app.get("/api/contracts/docusign-consent-url")
+async def get_docusign_consent_url():
+    """Get the DocuSign JWT consent URL. Open in browser, sign in, click Allow (one-time)."""
+    integration_key = os.getenv("DOCUSIGN_INTEGRATION_KEY", "")
+    oauth_host = os.getenv("DOCUSIGN_OAUTH_HOST", "account.docusign.com")
+    if not integration_key:
+        raise HTTPException(status_code=503, detail="DOCUSIGN_INTEGRATION_KEY not set in .env")
+    consent_url = f"https://{oauth_host}/oauth/auth?response_type=code&scope=signature%20impersonation&client_id={integration_key}&redirect_uri=https://developers.docusign.com/platform/auth/consent"
+    return {"consent_url": consent_url, "message": "Open this URL in your browser, sign in as the user in DOCUSIGN_USER_ID, then click Allow."}
+
+
+@app.get("/api/contracts/status/{envelope_id}")
+async def get_contract_status(envelope_id: str, update_db: bool = True):
+    """Fetch DocuSign envelope status. If update_db=true and status is completed/voided/declined, updates MongoDB."""
+    from services.docusign_service import get_envelope_status
+
+    try:
+        info = get_envelope_status(envelope_id)
+        status = info.get("status", "").lower()
+
+        # Map DocuSign status to our workflow.contractSent value
+        if update_db and status in ("completed", "voided", "declined"):
+            contract_status = "signed" if status == "completed" else status
+            update_expert_contract_status_by_envelope_id(envelope_id, contract_status)
+
+        return {
+            "envelope_id": envelope_id,
+            "status": info.get("status"),
+            "email_subject": info.get("email_subject"),
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+def _parse_docusign_webhook_payload(body: bytes, content_type: str) -> tuple:
+    """Parse DocuSign Connect payload (JSON or XML). Returns (envelope_id, status)."""
+    if not body:
+        return None, None
+
+    # JSON format
+    if "application/json" in content_type:
+        try:
+            data = json.loads(body)
+        except json.JSONDecodeError:
+            return None, None
+        envelope_id = (
+            data.get("envelopeId")
+            or data.get("envelope_id")
+            or (data.get("envelopeSummary") or {}).get("envelopeId")
+            or (data.get("envelopeSummary") or {}).get("envelope_id")
+            or (data.get("data") or {}).get("envelopeId")
+        )
+        # Connect 2.0 uses "event" (e.g. envelope-completed); legacy uses "status"
+        raw_status = (
+            data.get("event")
+            or data.get("status")
+            or data.get("envelopeStatus")
+            or (data.get("envelopeSummary") or {}).get("status")
+            or (data.get("data") or {}).get("status")
+        )
+        status = str(raw_status or "").lower().strip()
+        if status and "envelope-" in status:
+            status = status.replace("envelope-", "")  # envelope-completed -> completed
+        return (str(envelope_id).strip() if envelope_id else None), (
+            str(status).lower().strip() if status else None
+        )
+
+    # XML format (DocuSign Connect default)
+    try:
+        root = ET.fromstring(body)
+    except ET.ParseError:
+        return None, None
+
+    # DocuSign Connect XML: EnvelopeStatus/Status, EnvelopeID in various places
+    ns = {"ds": "http://www.docusign.net/API/3.0"}  # common namespace
+    envelope_id = None
+    status = None
+
+    for elem in root.iter():
+        tag = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
+        if tag == "EnvelopeID" and elem.text:
+            envelope_id = elem.text.strip()
+        elif tag == "Status" and elem.text and status is None:
+            status = elem.text.strip().lower()
+
+    return envelope_id, status
+
+
+@app.post("/api/contracts/docusign-webhook")
+async def docusign_webhook(request: Request, background_tasks: BackgroundTasks):
+    """
+    DocuSign Connect webhook. DocuSign POSTs here when envelope status changes.
+    Configure this URL in DocuSign Admin → Connect → Add Configuration.
+    Supports both JSON and XML payloads.
+    """
+    try:
+        body = await request.body()
+        content_type = request.headers.get("content-type", "")
+
+        envelope_id, status = _parse_docusign_webhook_payload(body, content_type)
+
+        logging.info(
+            "[DocuSign webhook] envelope_id=%s status=%s content_type=%s",
+            envelope_id,
+            status,
+            content_type[:50] if content_type else "none",
+        )
+
+        if envelope_id and status in ("completed", "voided", "declined"):
+            contract_status = "signed" if status == "completed" else status
+            background_tasks.add_task(
+                update_expert_contract_status_by_envelope_id,
+                envelope_id,
+                contract_status,
+            )
+            logging.info("[DocuSign webhook] queued update: envelope=%s -> %s", envelope_id, contract_status)
+
+        # DocuSign Connect XML/SOAP expects EnvelopeID in response for some configs
+        return {"status": "received", "envelopeId": envelope_id or ""}
+    except Exception as e:
+        logging.exception("DocuSign webhook error: %s", e)
+        return {"status": "error", "message": str(e)}
+
+
+@app.get("/api/contracts/docusign-config")
+async def get_docusign_config():
+    """Check if DocuSign is configured. Does NOT validate credentials."""
+    from services.docusign_service import get_docusign_config as _get_config
+    return _get_config()
+
+
+@app.get("/api/contracts/docusign-auth-test")
+async def test_docusign_auth():
+    """Test DocuSign JWT auth. Returns success or detailed error guidance."""
+    import os
+    base_path = os.getenv("DOCUSIGN_BASE_PATH", "https://demo.docusign.net/restapi")
+    oauth_host = os.getenv("DOCUSIGN_OAUTH_HOST", "").strip()
+    if not oauth_host:
+        oauth_host = "account-d.docusign.com" if "demo" in base_path else "account.docusign.com"
+
+    env_type = "demo" if "demo" in base_path or "account-d" in oauth_host else "production"
+    try:
+        from services.docusign_service import _get_api_client
+        _get_api_client()
+        return {
+            "success": True,
+            "message": "DocuSign JWT authentication successful",
+            "environment": env_type,
+            "oauth_host": oauth_host,
+        }
+    except Exception as e:
+        err_str = str(e).lower()
+        guidance = []
+        if "issuer_not_found" in err_str or "invalid_grant" in err_str:
+            guidance = [
+                "1. WRONG ENVIRONMENT: Your Integration Key may be from the opposite environment.",
+                "   - If using DEMO account: DOCUSIGN_OAUTH_HOST=account-d.docusign.com, DOCUSIGN_BASE_PATH=https://demo.docusign.net/restapi",
+                "   - If using PRODUCTION: DOCUSIGN_OAUTH_HOST=account.docusign.com, DOCUSIGN_BASE_PATH=https://www.docusign.net/restapi",
+                "2. WRONG USER ID: DOCUSIGN_USER_ID must be the User GUID (from Admin → Users → your user), NOT the Account ID.",
+                "3. GRANT CONSENT: Visit https://account-d.docusign.com/oauth/auth?response_type=code&scope=signature%20impersonation&client_id=YOUR_INTEGRATION_KEY&redirect_uri=https://developers.docusign.com/platform/auth/consent (replace YOUR_INTEGRATION_KEY)",
+                "   For production use: https://account.docusign.com/oauth/auth?...",
+            ]
+        return {
+            "success": False,
+            "error": str(e),
+            "environment": env_type,
+            "oauth_host": oauth_host,
+            "guidance": guidance,
+        }
 
 
 @app.get("/api/email/test")

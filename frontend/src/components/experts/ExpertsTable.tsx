@@ -130,23 +130,7 @@ export function ExpertsTable() {
   const [processingJobId, setProcessingJobId] = useState<string | null>(null);
   const tableScrollRef = useRef<HTMLDivElement>(null);
 
-  // Calculate HRW score range from actual data for default filter
-  const hrwScoreRange = useMemo(() => {
-    const scores = allExperts
-      .map(e => (e as any).hrwScore || (e as any).hrw_score)
-      .filter((score): score is number => typeof score === 'number');
-    if (scores.length === 0) return [0, 100];
-    return [Math.min(...scores), Math.max(...scores)];
-  }, [allExperts]);
-
-  // Update default HRW range when data loads (only if still at default)
-  useEffect(() => {
-    const isDefaultRange = filters.hrwScoreRange[0] === 0 && filters.hrwScoreRange[1] === 100;
-    const hasValidData = hrwScoreRange[0] !== 0 || hrwScoreRange[1] !== 100;
-    if (isDefaultRange && hasValidData && allExperts.length > 0) {
-      setFilters(prev => ({ ...prev, hrwScoreRange: [hrwScoreRange[0], hrwScoreRange[1]] }));
-    }
-  }, [hrwScoreRange, allExperts.length]);
+  // HRW score filter uses fixed 0–100 range (min and max set by slider thumbs)
 
   // Filter experts based on search and all filters
   const filteredExperts = useMemo(() => {
@@ -171,6 +155,12 @@ export function ExpertsTable() {
         (filters.emailFound === 'found' && expert.email && expert.email.trim() !== '') ||
         (filters.emailFound === 'not-found' && (!expert.email || expert.email.trim() === ''));
       
+      // Email status filter (sent / not sent)
+      const emailSentStatus = expert.workflow?.emailSent ?? 'pending';
+      const matchesEmailStatus = filters.emailStatus === 'all' ||
+        (filters.emailStatus === 'sent' && (emailSentStatus === 'sent' || emailSentStatus === 'opened')) ||
+        (filters.emailStatus === 'not_sent' && emailSentStatus === 'pending');
+      
       // Status filter
       const matchesStatus = filters.status.size === 0 || 
         filters.status.has(expert.status);
@@ -191,15 +181,15 @@ export function ExpertsTable() {
       const matchesHrwScore = hrwScore >= minScore && hrwScore <= maxScore;
       
       return matchesSearch && matchesLocation && matchesSkills && matchesEmail && 
-             matchesStatus && matchesGitGrade && matchesInterviewResult && matchesHrwScore;
+             matchesEmailStatus && matchesStatus && matchesGitGrade && matchesInterviewResult && matchesHrwScore;
     });
-  }, [allExperts, searchQuery, filters, hrwScoreRange]);
+  }, [allExperts, searchQuery, filters]);
 
   const clearFilters = () => {
     setSearchQuery('');
     setFilters({
       ...defaultFilters,
-      hrwScoreRange: [hrwScoreRange[0], hrwScoreRange[1]],
+      hrwScoreRange: [0, 100],
     });
     setCurrentPage(1); // Reset to first page when clearing filters
   };
@@ -220,15 +210,15 @@ export function ExpertsTable() {
     if (filters.locations.size > 0) count++;
     if (filters.skills.size > 0) count++;
     if (filters.emailFound !== 'all') count++;
+    if (filters.emailStatus !== 'all') count++;
     if (filters.status.size > 0) count++;
     if (filters.gitGrades.size > 0) count++;
     if (filters.interviewResult !== 'all') count++;
-    // Check if HRW range is different from the full data range
-    const isDefaultRange = filters.hrwScoreRange[0] === hrwScoreRange[0] && 
-                          filters.hrwScoreRange[1] === hrwScoreRange[1];
-    if (!isDefaultRange) count++;
+    // HRW filter is active when not the full 0–100 range
+    const isDefaultHrwRange = filters.hrwScoreRange[0] === 0 && filters.hrwScoreRange[1] === 100;
+    if (!isDefaultHrwRange) count++;
     return count;
-  }, [filters, hrwScoreRange]);
+  }, [filters]);
 
   const toggleSelection = (id: string) => {
     setSelectedExperts(prev => {
@@ -280,6 +270,13 @@ export function ExpertsTable() {
     return firstId ? findExpertById(firstId) : null;
   }, [selectedExperts, findExpertById]);
   const bulkInterviewDisabled = selectedExperts.size === 1 && (!bulkInterviewFirstExpert || !canScheduleInterview(bulkInterviewFirstExpert));
+
+  // At least one selected expert has email — show Send Email only then
+  const hasSelectedWithEmail = useMemo(() => {
+    return Array.from(selectedExperts)
+      .map((id) => findExpertById(id))
+      .some((e) => !!e && !!e.email?.trim());
+  }, [selectedExperts, findExpertById]);
 
   // Action handlers for individual expert
   const handleSendEmail = (expert: Expert) => {
@@ -484,6 +481,8 @@ export function ExpertsTable() {
                   variant="outline"
                   size="sm"
                   onClick={handleBulkEmail}
+                  disabled={!hasSelectedWithEmail}
+                  title={!hasSelectedWithEmail ? 'No selected expert has an email' : undefined}
                   className="flex items-center gap-2 text-xs sm:text-sm h-8"
                 >
                   <Mail className="w-3.5 h-3.5" />
@@ -624,6 +623,11 @@ export function ExpertsTable() {
                 Email: {filters.emailFound === 'found' ? 'Found' : 'Not Found'}
               </Badge>
             )}
+            {filters.emailStatus !== 'all' && (
+              <Badge variant="secondary" className="text-xs">
+                Email: {filters.emailStatus === 'sent' ? 'Sent' : 'Not Sent'}
+              </Badge>
+            )}
             {filters.status.size > 0 && (
               <Badge variant="secondary" className="text-xs">
                 {filters.status.size} status{filters.status.size !== 1 ? 'es' : ''}
@@ -639,15 +643,11 @@ export function ExpertsTable() {
                 Interview: {filters.interviewResult === 'pass' ? 'Pass' : filters.interviewResult === 'strong_pass' ? 'Strong Pass' : 'Fail'}
               </Badge>
             )}
-            {(() => {
-              const isDefaultRange = filters.hrwScoreRange[0] === hrwScoreRange[0] && 
-                                    filters.hrwScoreRange[1] === hrwScoreRange[1];
-              return !isDefaultRange && (
-                <Badge variant="secondary" className="text-xs">
-                  HRW: {Math.round(filters.hrwScoreRange[0])}-{Math.round(filters.hrwScoreRange[1])}
-                </Badge>
-              );
-            })()}
+            {!(filters.hrwScoreRange[0] === 0 && filters.hrwScoreRange[1] === 100) && (
+              <Badge variant="secondary" className="text-xs">
+                HRW: {Math.round(filters.hrwScoreRange[0])}-{Math.round(filters.hrwScoreRange[1])}
+              </Badge>
+            )}
           </div>
         )}
       </div>
@@ -829,11 +829,13 @@ export function ExpertsTable() {
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem 
-                            className="gap-2 cursor-pointer"
+                            className={cn("gap-2", expert.email?.trim() ? "cursor-pointer" : "cursor-not-allowed opacity-60")}
+                            disabled={!expert.email?.trim()}
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleSendEmail(expert);
+                              if (expert.email?.trim()) handleSendEmail(expert);
                             }}
+                            title={!expert.email?.trim() ? "No email for this expert" : undefined}
                           >
                             <Mail className="w-4 h-4" />
                             <span>Send Email</span>

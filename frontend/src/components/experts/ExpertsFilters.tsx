@@ -1,11 +1,10 @@
 import { useState, useMemo } from 'react';
-import { X, Check, ChevronDown, MapPin, Code, Mail, UserCheck, Award, FileCheck, TrendingUp } from 'lucide-react';
+import { X, Check, ChevronDown, MapPin, Code, Mail, UserCheck, Award, FileCheck, TrendingUp, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Slider } from '@/components/ui/slider';
 import * as SliderPrimitive from '@radix-ui/react-slider';
 import {
   Select,
@@ -34,6 +33,7 @@ export interface FilterState {
   locations: Set<string>;
   skills: Set<string>;
   emailFound: 'all' | 'found' | 'not-found';
+  emailStatus: 'all' | 'sent' | 'not_sent';
   status: Set<'available' | 'assessment' | 'interviewing' | 'onboarded' | 'contracted'>;
   gitGrades: Set<string>;
   interviewResult: 'all' | 'pass' | 'fail' | 'strong_pass';
@@ -44,6 +44,7 @@ const defaultFilters: FilterState = {
   locations: new Set(),
   skills: new Set(),
   emailFound: 'all',
+  emailStatus: 'all',
   status: new Set(),
   gitGrades: new Set(),
   interviewResult: 'all',
@@ -173,14 +174,9 @@ export function ExpertsFilters({ experts, filters, onFiltersChange, onClearFilte
     return allSkills.filter(skill => skill.toLowerCase().includes(searchLower));
   }, [allSkills, skillsSearch]);
 
-  // Calculate HRW score range from actual data
-  const hrwScoreRange = useMemo(() => {
-    const scores = experts
-      .map(e => (e as any).hrwScore || (e as any).hrw_score)
-      .filter((score): score is number => typeof score === 'number');
-    if (scores.length === 0) return [0, 100];
-    return [Math.min(...scores), Math.max(...scores)];
-  }, [experts]);
+  // HRW score filter uses fixed 0–100 range; data range is only for display hint
+  const HRW_SLIDER_MIN = 0;
+  const HRW_SLIDER_MAX = 100;
 
   const updateFilters = (updates: Partial<FilterState>) => {
     onFiltersChange({ ...filters, ...updates });
@@ -233,15 +229,16 @@ export function ExpertsFilters({ experts, filters, onFiltersChange, onClearFilte
     if (filters.locations.size > 0) count++;
     if (filters.skills.size > 0) count++;
     if (filters.emailFound !== 'all') count++;
+    if (filters.emailStatus !== 'all') count++;
     if (filters.status.size > 0) count++;
     if (filters.gitGrades.size > 0) count++;
     if (filters.interviewResult !== 'all') count++;
-    // Check if HRW range is different from the full data range
-    const isDefaultRange = filters.hrwScoreRange[0] === hrwScoreRange[0] && 
-                          filters.hrwScoreRange[1] === hrwScoreRange[1];
-    if (!isDefaultRange) count++;
+    // HRW filter is active when not the full 0–100 range
+    const isDefaultHrwRange = filters.hrwScoreRange[0] === HRW_SLIDER_MIN && 
+                              filters.hrwScoreRange[1] === HRW_SLIDER_MAX;
+    if (!isDefaultHrwRange) count++;
     return count;
-  }, [filters, hrwScoreRange]);
+  }, [filters]);
 
   const hasActiveFilters = activeFilterCount > 0;
 
@@ -380,7 +377,7 @@ export function ExpertsFilters({ experts, filters, onFiltersChange, onClearFilte
       <div className="space-y-3">
         <Label className="text-sm font-medium flex items-center gap-2">
           <Mail className="w-4 h-4" />
-          Email Status
+          Email Presence Status
         </Label>
         <Select
           value={filters.emailFound}
@@ -395,6 +392,29 @@ export function ExpertsFilters({ experts, filters, onFiltersChange, onClearFilte
             <SelectItem value="all">All</SelectItem>
             <SelectItem value="found">Email Found</SelectItem>
             <SelectItem value="not-found">Email Not Found</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Email Status (Sent / Not Sent) Filter */}
+      <div className="space-y-3">
+        <Label className="text-sm font-medium flex items-center gap-2">
+          <Send className="w-4 h-4" />
+          Email Status
+        </Label>
+        <Select
+          value={filters.emailStatus}
+          onValueChange={(value: 'all' | 'sent' | 'not_sent') =>
+            updateFilters({ emailStatus: value })
+          }
+        >
+          <SelectTrigger className="w-full bg-surface-1 border-border">
+            <SelectValue placeholder="All" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All</SelectItem>
+            <SelectItem value="sent">Sent</SelectItem>
+            <SelectItem value="not_sent">Not Sent</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -472,35 +492,42 @@ export function ExpertsFilters({ experts, filters, onFiltersChange, onClearFilte
         </Select>
       </div>
 
-      {/* HRW Score Filter */}
+      {/* HRW Score Filter — 0 (min) to 100 (max), two draggable thumbs */}
       <div className="space-y-3">
         <Label className="text-sm font-medium flex items-center gap-2">
           <TrendingUp className="w-4 h-4" />
           HRW Score
         </Label>
-        <div className="space-y-4 px-2">
-          <div className="relative">
+        <div className="space-y-4 px-1">
+          <div
+            className="relative flex w-full items-center py-3"
+            style={{ touchAction: 'none' }}
+          >
             <SliderPrimitive.Root
               value={[
-                Math.min(...filters.hrwScoreRange),
-                Math.max(...filters.hrwScoreRange)
+                Math.max(HRW_SLIDER_MIN, Math.min(HRW_SLIDER_MAX, Math.min(...filters.hrwScoreRange))),
+                Math.min(HRW_SLIDER_MAX, Math.max(HRW_SLIDER_MIN, Math.max(...filters.hrwScoreRange)))
               ]}
               onValueChange={(value) => {
-                // Ensure range is always [min, max] - left handle is min, right handle is max
-                const sorted = [...value].sort((a, b) => a - b) as [number, number];
-                updateFilters({ hrwScoreRange: sorted });
+                if (!Array.isArray(value) || value.length < 2) return;
+                const sorted = [value[0], value[1]].sort((a, b) => a - b) as [number, number];
+                const clamped: [number, number] = [
+                  Math.max(HRW_SLIDER_MIN, Math.min(HRW_SLIDER_MAX, sorted[0])),
+                  Math.max(HRW_SLIDER_MIN, Math.min(HRW_SLIDER_MAX, sorted[1]))
+                ];
+                updateFilters({ hrwScoreRange: clamped });
               }}
-              min={hrwScoreRange[0]}
-              max={hrwScoreRange[1]}
+              min={HRW_SLIDER_MIN}
+              max={HRW_SLIDER_MAX}
               step={1}
+              minStepsBetweenThumbs={1}
               className="relative flex w-full touch-none select-none items-center"
             >
               <SliderPrimitive.Track className="relative h-2 w-full grow overflow-hidden rounded-full bg-secondary">
-                {/* Selected range (between handles) - highlighted to show what's INCLUDED */}
                 <SliderPrimitive.Range className="absolute h-full bg-primary" />
               </SliderPrimitive.Track>
-              <SliderPrimitive.Thumb className="block h-5 w-5 rounded-full border-2 border-primary bg-background ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50" />
-              <SliderPrimitive.Thumb className="block h-5 w-5 rounded-full border-2 border-primary bg-background ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50" />
+              <SliderPrimitive.Thumb className="relative z-10 block h-5 w-5 shrink-0 rounded-full border-2 border-primary bg-background shadow-md ring-offset-background transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 cursor-grab active:cursor-grabbing [&[data-dragging]]:cursor-grabbing" />
+              <SliderPrimitive.Thumb className="relative z-10 block h-5 w-5 shrink-0 rounded-full border-2 border-primary bg-background shadow-md ring-offset-background transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 cursor-grab active:cursor-grabbing [&[data-dragging]]:cursor-grabbing" />
             </SliderPrimitive.Root>
           </div>
           <div className="flex justify-between text-xs text-muted-foreground">

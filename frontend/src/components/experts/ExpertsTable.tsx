@@ -774,11 +774,11 @@ export function ExpertsTable() {
                       </span>
                     </td>
                     <td className="py-3 px-3 align-middle whitespace-nowrap">
-                      <span className={`text-xs ${status.className}`}>{status.label}</span>
+                      <span className={`text-xs ${status?.className ?? 'text-muted-foreground'}`}>{status?.label ?? expert.status ?? '—'}</span>
                     </td>
                     <td className="py-3 px-3 align-middle whitespace-nowrap">
-                      <span className={`text-xs ${workflowLabels.emailSent[expert.workflow.emailSent].className}`}>
-                        {workflowLabels.emailSent[expert.workflow.emailSent].label}
+                      <span className={`text-xs ${workflowLabels.emailSent[expert.workflow?.emailSent as keyof typeof workflowLabels.emailSent]?.className ?? 'text-muted-foreground'}`}>
+                        {workflowLabels.emailSent[expert.workflow?.emailSent as keyof typeof workflowLabels.emailSent]?.label ?? '—'}
                       </span>
                     </td>
                     <td className="p-4">
@@ -787,13 +787,13 @@ export function ExpertsTable() {
                       </span>
                     </td>
                     <td className="py-3 px-3 align-middle whitespace-nowrap">
-                      <span className={`text-xs ${workflowLabels.interview[expert.workflow.interview].className}`}>
-                        {workflowLabels.interview[expert.workflow.interview].label}
+                      <span className={`text-xs ${workflowLabels.interview[expert.workflow?.interview as keyof typeof workflowLabels.interview]?.className ?? 'text-muted-foreground'}`}>
+                        {workflowLabels.interview[expert.workflow?.interview as keyof typeof workflowLabels.interview]?.label ?? '—'}
                       </span>
                     </td>
                     <td className="py-3 px-3 align-middle whitespace-nowrap">
-                      <span className={`text-xs ${workflowLabels.interviewResult[expert.workflow.interviewResult].className}`}>
-                        {workflowLabels.interviewResult[expert.workflow.interviewResult].label}
+                      <span className={`text-xs ${workflowLabels.interviewResult[expert.workflow?.interviewResult as keyof typeof workflowLabels.interviewResult]?.className ?? 'text-muted-foreground'}`}>
+                        {workflowLabels.interviewResult[expert.workflow?.interviewResult as keyof typeof workflowLabels.interviewResult]?.label ?? '—'}
                       </span>
                     </td>
                     <td className="py-3 px-3 align-middle min-w-0">

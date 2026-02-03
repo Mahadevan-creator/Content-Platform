@@ -70,7 +70,7 @@ export default function Index() {
         />
       </div>
       
-      <main className="flex-1 min-h-0 overflow-auto flex flex-col">
+      <main className="flex-1 min-w-0 min-h-0 overflow-auto flex flex-col">
         {/* Desktop: top bar with theme toggle (only for Builder/Job Board; Experts has it in header) */}
         {!isMobile && activeSection !== 'experts' && (
           <div className="app-bar sticky top-0 z-20 flex items-center justify-end h-10 px-4 md:px-6 shrink-0 backdrop-blur-md bg-background/80">
@@ -95,10 +95,10 @@ export default function Index() {
           </div>
         )}
         
-        <div className="pt-8 px-4 pb-4 md:pt-10 md:px-8 md:pb-8 flex-1 min-h-0 flex flex-col">
+        <div className="pt-8 px-4 pb-4 md:pt-10 md:px-6 md:pb-8 flex-1 min-h-0 flex flex-col min-w-0">
           <div className={cn(
-            "mx-auto flex-1 min-h-0 flex flex-col w-full",
-            activeSection === 'experts' ? "max-w-7xl" : "max-w-[90rem]"
+            "flex-1 min-h-0 flex flex-col w-full min-w-0 transition-[max-width] duration-300 ease-out",
+            activeSection === 'experts' ? "max-w-none" : "mx-auto max-w-[90rem]"
           )}>
             <ActiveComponent key={activeSection} />
           </div>

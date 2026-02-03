@@ -568,7 +568,7 @@ export function ExpertsTable() {
   }
 
   return (
-    <div className="flex flex-col h-full min-h-0 w-full">
+    <div className="flex flex-col h-full min-h-0 w-full min-w-0">
       {/* Header with actions - stays fixed while table scrolls */}
       <div className="flex flex-col gap-4 mb-4 shrink-0">
         <div className="flex flex-col gap-4">
@@ -802,10 +802,10 @@ export function ExpertsTable() {
         )}
       </div>
 
-      {/* Table – fixed width and height so list never shrinks when searching/filtering */}
-      <div className="card-terminal flex-1 min-h-[60vh] w-full min-w-0 flex flex-col overflow-hidden">
-        <div ref={tableScrollRef} className="flex-1 min-h-[50vh] w-full min-w-0 overflow-y-auto overflow-x-hidden">
-          <table className="w-full min-w-full table-fixed border-collapse">
+      {/* Table – fills available space, scrolls when needed; width responds to sidebar collapse/expand */}
+      <div className="card-terminal flex-1 min-h-[65vh] w-full min-w-0 flex flex-col overflow-hidden">
+        <div ref={tableScrollRef} className="flex-1 min-h-[50vh] w-full min-w-0 overflow-y-auto overflow-x-auto">
+          <table className="w-full min-w-[800px] table-fixed border-collapse">
             <colgroup>
               <col className="w-[2.5%]" />
               <col className="w-[23%]" />

@@ -422,7 +422,7 @@ export function ExpertsTable() {
         description: 'Candidate must pass the interview first (Result: Pass or Strong Pass).',
         variant: 'destructive',
       });
-      return;
+      return;                                                   
     }
     setSelectedExpert(expert);
     setContractModalOpen(true);

@@ -1155,6 +1155,8 @@ def update_expert_interview_completion(email: str, interview_status: str, interv
         # Update interview status based on HackerRank status ('ended' or 'completed' = done)
         if interview_status in ('ended', 'completed'):
             existing_workflow['interview'] = 'completed'
+            # Always set interviewResult when completed - use parsed result or 'pending' if unknown
+            existing_workflow['interviewResult'] = interview_result if interview_result else 'pending'
         elif interview_status in ['in_progress', 'started']:
             existing_workflow['interview'] = 'scheduled'  # Keep as scheduled if in progress
         else:
@@ -1162,8 +1164,8 @@ def update_expert_interview_completion(email: str, interview_status: str, interv
             if 'interview' not in existing_workflow:
                 existing_workflow['interview'] = 'scheduled'
         
-        # Update interview result if provided
-        if interview_result:
+        # Update interview result if provided (for non-completed status updates)
+        if interview_result and interview_status not in ('ended', 'completed'):
             existing_workflow['interviewResult'] = interview_result
             # Update overall status based on result
             if interview_result in ['pass', 'strong_pass']:
@@ -1255,12 +1257,13 @@ def update_expert_assessment_completion(
         if 'interviewResult' not in existing_workflow:
             existing_workflow['interviewResult'] = 'pending'
         
-        # Update testSent: 'sent' -> 'passed' or 'failed' based on assessment result
+        # Update testSent: 'sent' -> 'passed' or 'failed' based on assessment result (score >= 75 = pass)
         existing_workflow['testSent'] = assessment_result  # 'passed' or 'failed'
         # When test fails, also set interviewResult to 'fail' so Result column shows Failed (not —)
         if assessment_result == 'failed':
             existing_workflow['interviewResult'] = 'fail'
         
+        # Status stays 'assessment' - only workflow.testSent is updated to passed/failed
         update_data = {
             'updated_at': current_time,
             'workflow': existing_workflow,
@@ -1272,16 +1275,12 @@ def update_expert_assessment_completion(
         if test_candidate_id:
             update_data['test_candidate_id'] = test_candidate_id
         
-        # If passed, keep status as 'assessment' (or could move to 'available' for next stage)
-        # If failed, keep status as 'assessment' - user can manually move if needed
-        # Don't change status here - let workflow reflect the result
-        
         result = collection.update_one(
             {'email': email},
             {'$set': update_data}
         )
         
-        if result.acknowledged and result.modified_count > 0:
+        if result.acknowledged:
             updated_doc = collection.find_one({'email': email})
             if updated_doc:
                 if '_id' in updated_doc:
@@ -1290,7 +1289,7 @@ def update_expert_assessment_completion(
                 return updated_doc
             return None
         else:
-            print(f"⚠️  Update not acknowledged or no changes for {email}")
+            print(f"⚠️  Update not acknowledged for {email}")
             return None
             
     except Exception as e:

@@ -166,16 +166,5 @@ cd backend && python3 services/interview_poller.py
 python3 services/interview_poller.py
 ```
 
-### Test (Assessment) Poller
-Polls HackerRank every 30 minutes for test results. Candidates with status `assessment` are checked.
-- **Pass**: score >= 75 AND plagiarism is false
-- **Fail**: score < 75 OR plagiarism detected
-```bash
-# From project root:
-cd backend && python3 services/test_poller.py
-
-# Or if already in backend directory:
-python3 services/test_poller.py
-```
-
-Requires `HACKERRANK_API_KEY` in `.env`.
+### Test (Assessment) Results
+Test results are delivered via webhook. When you send a test, set `TEST_RESULT_CALLBACK_URL` in `.env` (e.g. `https://your-api.com/api/tests/result-callback`). HackerRank POSTs results there when the candidate completes the test. No polling required.

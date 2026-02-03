@@ -104,7 +104,7 @@ def determine_interview_result(interview_data: Dict) -> Optional[str]:
     """Determine interview result from HackerRank data.
     
     HackerRank API returns status='ended' when interview is done.
-    Result sources (in order): thumbs_up, direct result field (yes/no), feedback (Yes/No).
+    Result sources (in order): thumbs_up, recommendation/hire, result, feedback (Yes/No).
     
     Returns: 'pass', 'fail', or None (pending)
     """
@@ -118,18 +118,51 @@ def determine_interview_result(interview_data: Dict) -> Optional[str]:
     elif thumbs_up == 0 or thumbs_up is False:
         return 'fail'
     
-    # 2. Direct result field: "yes" -> pass, "no" -> fail (HackerRank may send this)
-    result_val = interview_data.get('result')
+    # 2. hire / recommend_hire (boolean)
+    hire = interview_data.get('hire') or interview_data.get('recommend_hire')
+    if hire is True:
+        return 'pass'
+    elif hire is False:
+        return 'fail'
+    
+    # 3. Direct result field: "yes" -> pass, "no" -> fail (HackerRank may send this)
+    result_val = (
+        interview_data.get('result')
+        or interview_data.get('recommendation')
+        or interview_data.get('interviewer_recommendation')
+    )
     if result_val is not None:
         r = str(result_val).strip().lower()
-        if r in ('yes', 'y'):
+        if r in ('yes', 'y', 'true', '1'):
             return 'pass'
-        if r in ('no', 'n'):
+        if r in ('no', 'n', 'false', '0'):
             return 'fail'
     
-    # 3. When thumbs_up and result are null, parse feedback for Yes/No
-    feedback = interview_data.get('feedback')
-    return _parse_feedback_result(feedback)
+    # 4. Parse feedback for Yes/No (check multiple possible keys)
+    feedback = (
+        interview_data.get('feedback')
+        or interview_data.get('interviewer_feedback')
+        or interview_data.get('feedback_text')
+    )
+    if feedback:
+        parsed = _parse_feedback_result(feedback)
+        if parsed:
+            return parsed
+    # 5. Check feedback_questions array (HackerRank may nest feedback here)
+    feedback_questions = interview_data.get('feedback_questions')
+    if isinstance(feedback_questions, list):
+        for q in feedback_questions:
+            if isinstance(q, dict):
+                ans = q.get('answer') or q.get('response') or q.get('value')
+                if ans:
+                    parsed = _parse_feedback_result(str(ans))
+                    if parsed:
+                        return parsed
+            elif isinstance(q, str):
+                parsed = _parse_feedback_result(q)
+                if parsed:
+                    return parsed
+    return None
 
 
 def poll_all_pending_interviews():
@@ -144,7 +177,6 @@ def poll_all_pending_interviews():
         'workflow.interview': 'scheduled',
         'interview_id': {'$exists': True, '$ne': None}
     }
-    
     experts_with_interviews = list(collection.find(query))
     
     if not experts_with_interviews:
@@ -191,7 +223,7 @@ def poll_all_pending_interviews():
                 update_result = update_expert_interview_completion(
                     email=email,
                     interview_status=interview_status,
-                    interview_result=interview_result,
+                    interview_result=interview_result or 'pending',
                     interview_id=interview_id
                 )
                 
